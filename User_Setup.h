@@ -64,7 +64,9 @@
 #endif
 #if BOARD_DISPLAY_DRIVER_ST7789
 #define ST7789_DRIVER        // NM-CYD-C5 default display
-#define TFT_INVERSION_ON     // NM-CYD-C5 ST7789 panel needs inversion (else colours are inverted)
+// TFT_eSPI's ST7789 driver enables inversion by default; this NM-CYD-C5 panel
+// shows correct colours only with inversion OFF.
+#define TFT_INVERSION_OFF
 #endif
 //#define ILI9341_2_DRIVER     // Alternative ILI9341 driver, see https://github.com/Bodmer/TFT_eSPI/issues/1172
 //#define ST7735_DRIVER      // Define additional parameters below for this display
