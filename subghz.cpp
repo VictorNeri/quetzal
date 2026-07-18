@@ -2,7 +2,7 @@
 #include "shared.h"
 #include "icon.h"
 #include "Touchscreen.h"
-#include "driver/rmt.h"  // ESP32 RMT peripheral for hardware-timed OOK transmission
+#include "rmt_compat.h"  // legacy RMT on ESP32-DIV V1, new driver/rmt_tx.h on ESP32-C5
 #include <cstring>       // For memset()
 
 /*
@@ -85,6 +85,7 @@ bool subghz_receive_active = false;  // Flag to track if RCSwitch receive is ena
 // Forward declaration for RMT cleanup
 namespace subbrute {
     extern bool rmtInitialized;
+    void deinitRMT();
 }
 
 // Cleanup function for switching FROM SubGHz TO 2.4GHz modes (global scope to match header declaration)
@@ -96,7 +97,7 @@ void cleanupSubGHz() {
 
     // Clean up RMT driver if it was initialized
     if (subbrute::rmtInitialized) {
-        rmt_driver_uninstall(RMT_CHANNEL_0);
+        subbrute::deinitRMT();
         subbrute::rmtInitialized = false;
         Serial.println("[SubGHz] RMT driver uninstalled");
     }
@@ -2247,6 +2248,79 @@ RCSwitch bruteSwitch = RCSwitch();
 static rmt_item32_t rmtSymbols[RMT_MAX_SYMBOLS];
 bool rmtInitialized = false;  // Not static - shared with subjammer namespace
 
+#if RMT_COMPAT_NEW_DRIVER
+
+// ── ESP32-C5 / ESP-IDF 5: new driver/rmt_tx.h implementation ────────────────
+// 1 MHz resolution => 1 tick == 1 us, matching the legacy CLK_DIV=80 timing, so
+// every symbol duration in this file keeps meaning microseconds.
+static rmt_channel_handle_t rmtChannel = NULL;
+static rmt_encoder_handle_t rmtEncoder = NULL;
+
+bool initRMT() {
+    if (rmtInitialized) return true;
+
+    rmt_tx_channel_config_t txCfg = {};
+    txCfg.gpio_num = (gpio_num_t)TX_PIN;
+    txCfg.clk_src = RMT_CLK_SRC_DEFAULT;
+    txCfg.resolution_hz = 1000000;      // 1 MHz -> 1 us per tick
+    txCfg.mem_block_symbols = 64;
+    txCfg.trans_queue_depth = 4;
+
+    if (rmt_new_tx_channel(&txCfg, &rmtChannel) != ESP_OK) {
+        Serial.println("[RMT-INIT] rmt_new_tx_channel FAILED");
+        rmtChannel = NULL;
+        return false;
+    }
+
+    rmt_copy_encoder_config_t encCfg = {};
+    if (rmt_new_copy_encoder(&encCfg, &rmtEncoder) != ESP_OK) {
+        Serial.println("[RMT-INIT] rmt_new_copy_encoder FAILED");
+        rmt_del_channel(rmtChannel);
+        rmtChannel = NULL;
+        return false;
+    }
+
+    if (rmt_enable(rmtChannel) != ESP_OK) {
+        Serial.println("[RMT-INIT] rmt_enable FAILED");
+        rmt_del_encoder(rmtEncoder);
+        rmt_del_channel(rmtChannel);
+        rmtEncoder = NULL;
+        rmtChannel = NULL;
+        return false;
+    }
+
+    rmtInitialized = true;
+    Serial.println("[RMT-INIT] SUCCESS (new RMT driver) - 1us resolution");
+    return true;
+}
+
+void deinitRMT() {
+    if (rmtChannel) {
+        rmt_disable(rmtChannel);
+        rmt_del_channel(rmtChannel);
+        rmtChannel = NULL;
+    }
+    if (rmtEncoder) {
+        rmt_del_encoder(rmtEncoder);
+        rmtEncoder = NULL;
+    }
+    rmtInitialized = false;
+}
+
+// Transmit RMT symbols (hardware-timed, blocking)
+void rmtTransmit(rmt_item32_t* items, size_t numItems) {
+    if (!rmtInitialized) return;
+
+    rmt_transmit_config_t txConf = {};
+    txConf.loop_count = 0;  // single shot
+    // The copy encoder takes raw rmt_symbol_word_t payload (size in bytes).
+    rmt_transmit(rmtChannel, rmtEncoder, items, numItems * sizeof(rmt_item32_t), &txConf);
+    rmt_tx_wait_all_done(rmtChannel, -1);  // block until complete (legacy was blocking)
+}
+
+#else
+
+// ── Original ESP32-DIV V1 / ESP-IDF 4: legacy driver/rmt.h implementation ────
 // Initialize RMT for OOK transmission
 bool initRMT() {
     Serial.println("[RMT-INIT] initRMT() called");
@@ -2308,6 +2382,11 @@ bool initRMT() {
     return true;
 }
 
+void deinitRMT() {
+    rmt_driver_uninstall(RMT_TX_CHANNEL);
+    rmtInitialized = false;
+}
+
 // Transmit RMT symbols (hardware-timed, blocking)
 static uint32_t rmtTxCount = 0;
 void rmtTransmit(rmt_item32_t* items, size_t numItems) {
@@ -2332,6 +2411,8 @@ void rmtTransmit(rmt_item32_t* items, size_t numItems) {
         Serial.flush();
     }
 }
+
+#endif // RMT_COMPAT_NEW_DRIVER
 
 // Encode a single OOK bit into RMT symbol
 // Each symbol = one complete bit (HIGH pulse + LOW pulse)
