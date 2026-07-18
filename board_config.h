@@ -22,6 +22,9 @@
 #define BOARD_HAS_BT_CLASSIC 1
 #define BOARD_BLE_STACK_NIMBLE 0
 
+// Battery sense ADC pin (GPIO36 via a 2:1 divider). -1 disables battery reading.
+#define BOARD_BATTERY_ADC_PIN 36
+
 #define BOARD_PCF8574_ADDR    0x20
 #define BOARD_BUTTON_UP       6
 #define BOARD_BUTTON_DOWN     3
@@ -73,6 +76,10 @@
 // Classic-BT features must be compiled out; BLE features use NimBLE-Arduino.
 #define BOARD_HAS_BT_CLASSIC 0
 #define BOARD_BLE_STACK_NIMBLE 1
+
+// GPIO36 does not exist on the ESP32-C5 and the NM-CYD-C5 has no documented
+// battery divider, so battery sensing is disabled (reads a nominal voltage).
+#define BOARD_BATTERY_ADC_PIN -1
 
 // NM-CYD-C5 has no PCF8574 button expander in the board docs. Keep the
 // button aliases defined so legacy code compiles, but gate PCF access with

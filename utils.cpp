@@ -156,9 +156,14 @@ float readBatteryVoltage() {
   static bool adcInitialized = false;
   static unsigned long lastDebugPrint = 0;
 
+#if BOARD_BATTERY_ADC_PIN < 0
+  // No battery divider on this board (e.g. NM-CYD-C5; GPIO36 does not exist on
+  // the C5). Report a nominal "full" voltage instead of spamming ADC errors.
+  return 4.2f;
+#else
   // Initialize ADC attenuation on first call (11dB for 0-3.3V range)
   if (!adcInitialized) {
-    analogSetPinAttenuation(36, ADC_11db);
+    analogSetPinAttenuation(BOARD_BATTERY_ADC_PIN, ADC_11db);
     adcInitialized = true;
     Serial.println("[BATTERY] ADC initialized on GPIO36 with 11dB attenuation");
   }
@@ -167,7 +172,7 @@ float readBatteryVoltage() {
   uint32_t sum = 0;
 
   for (int i = 0; i < sampleCount; i++) {
-    sum += analogReadMilliVolts(36);  // Use calibrated millivolt reading
+    sum += analogReadMilliVolts(BOARD_BATTERY_ADC_PIN);  // Use calibrated millivolt reading
     delayMicroseconds(500);  // Faster sampling
   }
 
@@ -185,6 +190,7 @@ float readBatteryVoltage() {
   }
 
   return voltage;
+#endif // BOARD_BATTERY_ADC_PIN
 }
 
 float readInternalTemperature() {
