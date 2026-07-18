@@ -79,7 +79,11 @@ echo ""
 echo "Flashing ESP32-C5 build on $PORT ..."
 echo ""
 
-"${ESPTOOL_CMD[@]}" --chip esp32c5 --port "$PORT" --baud 921600 write_flash -z \
+# --flash_size detect: the esp32-c5-devkitc-1 board profile builds the bootloader
+# header for 4 MB flash; without this esptool keeps that value and the bootloader
+# rejects the 16 MB partition table ("offset 0x10000 ... exceeds flash chip size
+# 0x400000"). detect reads the real 16 MB chip and patches the header.
+"${ESPTOOL_CMD[@]}" --chip esp32c5 --port "$PORT" --baud 921600 write_flash -z --flash_size detect \
     0x2000  "$BUILD_DIR/bootloader.bin" \
     0x8000  "$BUILD_DIR/partitions.bin" \
     0xe000  "$BOOT_APP0" \
