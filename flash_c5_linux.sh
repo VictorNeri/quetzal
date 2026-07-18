@@ -40,21 +40,22 @@ if [ ! -f "$BUILD_DIR/firmware.bin" ]; then
 fi
 
 # --- Locate esptool ----------------------------------------------------------
-ESPTOOL=""
-for cand in \
-  "$HOME/.platformio/packages/tool-esptoolpy/esptool.py" \
-  "$(command -v esptool.py 2>/dev/null || true)" \
-  "$(command -v esptool 2>/dev/null || true)"; do
-  if [ -n "$cand" ] && [ -e "$cand" ]; then ESPTOOL="$cand"; break; fi
-done
-if [ -z "$ESPTOOL" ]; then
-  # Fall back to the Python module form.
-  if python3 -c "import esptool" >/dev/null 2>&1; then
-    ESPTOOL="python3 -m esptool"
-  else
-    echo "ERROR: esptool not found. Install it (pip install esptool) or use: pio run -e nm-cyd-c5 -t upload"
-    exit 1
-  fi
+# Invoke esptool through an interpreter that actually has the module + pyserial.
+# PlatformIO's bundled penv python is the reliable choice; the raw esptool.py has
+# a `#!/usr/bin/env python` shebang that fails on python3-only systems.
+ESPTOOL_CMD=()
+PIO_PYTHON="$HOME/.platformio/penv/bin/python"
+if [ -x "$PIO_PYTHON" ] && "$PIO_PYTHON" -m esptool version >/dev/null 2>&1; then
+  ESPTOOL_CMD=("$PIO_PYTHON" -m esptool)
+elif command -v esptool.py >/dev/null 2>&1; then
+  ESPTOOL_CMD=(esptool.py)
+elif command -v esptool >/dev/null 2>&1; then
+  ESPTOOL_CMD=(esptool)
+elif python3 -c "import esptool" >/dev/null 2>&1; then
+  ESPTOOL_CMD=(python3 -m esptool)
+else
+  echo "ERROR: esptool not found. Install it (pip install esptool) or use: pio run -e nm-cyd-c5 -t upload"
+  exit 1
 fi
 
 # --- Locate boot_app0.bin (ships with the Arduino framework) -----------------
@@ -69,7 +70,8 @@ fi
 # On the NM-CYD-C5 the ESP32-C5 native USB (USB-CDC) usually enumerates as
 # /dev/ttyACM*, while the CH340 USB-UART bridge appears as /dev/ttyUSB*.
 echo "Available ports:"
-ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null || echo "  (none found)"
+PORTS="$(ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null || true)"
+if [ -n "$PORTS" ]; then echo "$PORTS"; else echo "  (none found)"; fi
 echo ""
 read -r -p "Enter port (e.g., /dev/ttyACM0): " PORT
 
@@ -77,7 +79,7 @@ echo ""
 echo "Flashing ESP32-C5 build on $PORT ..."
 echo ""
 
-$ESPTOOL --chip esp32c5 --port "$PORT" --baud 921600 write_flash -z \
+"${ESPTOOL_CMD[@]}" --chip esp32c5 --port "$PORT" --baud 921600 write_flash -z \
     0x2000  "$BUILD_DIR/bootloader.bin" \
     0x8000  "$BUILD_DIR/partitions.bin" \
     0xe000  "$BOOT_APP0" \
