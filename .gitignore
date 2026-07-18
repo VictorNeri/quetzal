@@ -7,3 +7,9 @@
 *.elf
 *.map
 *.backup
+.pio/
+
+# PlatformIO / pioarduino build-generated and machine-specific files
+idf_component.yml
+idf_component.yml.orig
+.vscode/c_cpp_properties.json

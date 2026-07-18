@@ -19,7 +19,7 @@ void cleanupSD() {
     delay(10);
 
     // Release GPIO 5 (SD_CS_PIN) - set to INPUT so NRF24 can take it
-    pinMode(5, INPUT);
+    pinMode(BOARD_SD_CS, INPUT);
 
     Serial.println("[SD] Cleanup complete - GPIO 5 released for NRF24");
 }
@@ -39,11 +39,11 @@ namespace PacketMonitor {
 
 arduinoFFT FFT = arduinoFFT();
 
-#define BTN_UP     6
-#define BTN_DOWN   3
-#define BTN_LEFT   4
-#define BTN_RIGHT  5
-#define BTN_SELECT 7
+#define BTN_UP     BOARD_BUTTON_UP
+#define BTN_DOWN   BOARD_BUTTON_DOWN
+#define BTN_LEFT   BOARD_BUTTON_LEFT
+#define BTN_RIGHT  BOARD_BUTTON_RIGHT
+#define BTN_SELECT BOARD_BUTTON_SELECT
 
 bool btnLeftPressed = false;
 bool btnRightPressed = false;
@@ -61,7 +61,7 @@ unsigned long microseconds;
 double vReal[samples];
 double vImag[samples];
 
-byte palette_red[128], palette_green[128], palette_blue[128];
+uint8_t palette_red[128], palette_green[128], palette_blue[128];
 
 bool buttonPressed = false;
 bool buttonEnabled = true;
@@ -198,9 +198,17 @@ void do_sampling_FFT() {
   delay(10);
 }
 
+#if ESP_IDF_VERSION_MAJOR >= 5
+// system_event_t was removed in ESP-IDF 5. This handler is unused (its
+// registration below is commented out); keep a compatible stub for the C5 core.
+esp_err_t event_handler(void* ctx, void* event) {
+  return ESP_OK;
+}
+#else
 esp_err_t event_handler(void* ctx, system_event_t* event) {
   return ESP_OK;
 }
+#endif
 
 double getMultiplicator() {
   uint32_t maxVal = 1;
@@ -376,7 +384,12 @@ void ptmSetup() {
   preferences.end();
 
   nvs_flash_init();
+#if ESP_IDF_VERSION_MAJOR >= 5
+  // tcpip_adapter_init() was removed in ESP-IDF 5 in favor of esp_netif.
+  esp_netif_init();
+#else
   tcpip_adapter_init();
+#endif
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
   //ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL));
   ESP_ERROR_CHECK(esp_wifi_init(&cfg));
@@ -453,11 +466,11 @@ void ptmLoop() {
 
 namespace BeaconSpammer {
 
-#define BTN_UP     6
-#define BTN_DOWN   3
-#define BTN_LEFT   4
-#define BTN_RIGHT  5
-#define BTN_SELECT 7
+#define BTN_UP     BOARD_BUTTON_UP
+#define BTN_DOWN   BOARD_BUTTON_DOWN
+#define BTN_LEFT   BOARD_BUTTON_LEFT
+#define BTN_RIGHT  BOARD_BUTTON_RIGHT
+#define BTN_SELECT BOARD_BUTTON_SELECT
 
 bool btnLeftPress;
 bool btnRightPress;
@@ -597,7 +610,7 @@ void spammer() {
 
 void beaconSpam() {
     String ssid = "1234567890qwertyuiopasdfghjkklzxcvbnm QWERTYUIOPASDFGHJKLZXCVBNM_";
-    byte channel;
+    uint8_t channel;
 
     uint8_t packet[128] = { 0x80, 0x00, 0x00, 0x00, 
                             0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
@@ -950,11 +963,11 @@ namespace DeauthDetect {
 #define LINE_HEIGHT 12
 #define MAX_LINES (SCREEN_HEIGHT / LINE_HEIGHT)
 
-#define BTN_UP     6
-#define BTN_DOWN   3
-#define BTN_LEFT   4
-#define BTN_RIGHT  5
-#define BTN_SELECT 7
+#define BTN_UP     BOARD_BUTTON_UP
+#define BTN_DOWN   BOARD_BUTTON_DOWN
+#define BTN_LEFT   BOARD_BUTTON_LEFT
+#define BTN_RIGHT  BOARD_BUTTON_RIGHT
+#define BTN_SELECT BOARD_BUTTON_SELECT
 
 #define MAX_NETWORKS 50
 #define MAX_CHANNELS 14
@@ -1349,10 +1362,10 @@ namespace WifiScan {
 #define TFT_WIDTH 240
 #define TFT_HEIGHT 320
 
-#define BTN_UP 6
-#define BTN_DOWN 3
-#define BTN_RIGHT 5
-#define BTN_LEFT 4
+#define BTN_UP       BOARD_BUTTON_UP
+#define BTN_DOWN     BOARD_BUTTON_DOWN
+#define BTN_RIGHT    BOARD_BUTTON_RIGHT
+#define BTN_LEFT     BOARD_BUTTON_LEFT
 
 #define SCREEN_WIDTH  240
 #define SCREENHEIGHT 320
@@ -1758,7 +1771,7 @@ const char* default_ssid = "ESP32DIV_AP";
 char custom_ssid[32] = "ESP32DIV_AP";
 const char* password = NULL;
 DNSServer dnsServer;
-const byte DNS_PORT = 53;
+const uint8_t DNS_PORT = 53;
 WebServer server(80);
 bool attackActive = true;
 
@@ -3487,7 +3500,7 @@ void deautherLoop() {
 
 namespace FirmwareUpdate {
 
-#define SD_CS_PIN 5
+#define SD_CS_PIN BOARD_SD_CS
 #define FIRMWARE_FILE "/firmware.bin"
 
 const char* host = "esp32";

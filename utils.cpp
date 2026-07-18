@@ -3,6 +3,17 @@
 #include "icon.h"
 #include "Touchscreen.h"
 #include <WiFi.h>  // For WiFi.RSSI() and WiFi.status()
+#include "esp_idf_version.h"  // ESP_IDF_VERSION_MAJOR for API-compat guards
+
+// Vertical-scroll command opcodes. TFT_eSPI only defines the ILI9341_* names when
+// the ILI9341 driver is selected (original board). The NM-CYD-C5 uses the ST7789
+// driver, which shares the same standard MIPI DCS opcodes, so provide fallbacks.
+#ifndef ILI9341_VSCRDEF
+#define ILI9341_VSCRDEF  0x33  // Vertical Scrolling Definition
+#endif
+#ifndef ILI9341_VSCRSADD
+#define ILI9341_VSCRSADD 0x37  // Vertical Scrolling Start Address
+#endif
 
 
 /*
@@ -124,6 +135,9 @@ void printWrappedText(int x, int y, int maxWidth, const char* text) {
  * 
  */
 
+#if ESP_IDF_VERSION_MAJOR < 5
+// Legacy ESP32 internal temperature sensor (note the upstream typo in the name).
+// Removed in ESP-IDF 5; the C5 build uses the Arduino core's temperatureRead().
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -132,6 +146,7 @@ uint8_t temprature_sens_read();
 }
 #endif
 uint8_t temprature_sens_read();
+#endif
 
 unsigned long lastStatusBarUpdate = 0;
 const int STATUS_BAR_UPDATE_INTERVAL = 1000; 
@@ -173,8 +188,13 @@ float readBatteryVoltage() {
 }
 
 float readInternalTemperature() {
-  float temperature = ((temprature_sens_read() - 32) / 1.8); 
+#if ESP_IDF_VERSION_MAJOR >= 5
+  // Arduino core 3.x returns the internal sensor reading directly in Celsius.
+  return temperatureRead();
+#else
+  float temperature = ((temprature_sens_read() - 32) / 1.8);
   return temperature;
+#endif
 }
 
 // Check if SD card is available

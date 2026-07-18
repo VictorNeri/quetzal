@@ -1,6 +1,8 @@
 #ifndef SUBCONFIG_H
 #define SUBCONFIG_H
 
+#include "board_config.h"
+
 #include "utils.h"
 #include "arduinoFFT.h"
 #include <TFT_eSPI.h> 
@@ -28,11 +30,11 @@ namespace replayat {
 // Cleanup function - call BEFORE switching FROM SubGHz TO 2.4GHz modes
 void cleanupSubGHz();
 
-#define XPT2046_IRQ   34
-#define XPT2046_MOSI  32
-#define XPT2046_MISO  35
-#define XPT2046_CLK   25
-#define XPT2046_CS    33
+#define XPT2046_IRQ   BOARD_TOUCH_IRQ
+#define XPT2046_MOSI  BOARD_TOUCH_MOSI
+#define XPT2046_MISO  BOARD_TOUCH_MISO
+#define XPT2046_CLK   BOARD_TOUCH_CLK
+#define XPT2046_CS    BOARD_TOUCH_CS
 
 
 namespace replayat {

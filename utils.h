@@ -1,6 +1,9 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include "board_config.h"
+#include <Arduino.h>
+
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
 #include <SPI.h>
@@ -8,11 +11,11 @@
 
 extern TFT_eSPI tft;
 
-#define XPT2046_IRQ   34
-#define XPT2046_MOSI  32
-#define XPT2046_MISO  35
-#define XPT2046_CLK   25
-#define XPT2046_CS    33
+#define XPT2046_IRQ   BOARD_TOUCH_IRQ
+#define XPT2046_MOSI  BOARD_TOUCH_MOSI
+#define XPT2046_MISO  BOARD_TOUCH_MISO
+#define XPT2046_CLK   BOARD_TOUCH_CLK
+#define XPT2046_CS    BOARD_TOUCH_CS
 
 void updateStatusBar();
 float readBatteryVoltage();

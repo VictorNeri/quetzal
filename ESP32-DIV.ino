@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include "board_config.h"
 #include <TFT_eSPI.h>
 #include <Wire.h>
 #include <PCF8574.h>
@@ -14,14 +15,14 @@
 
 TFT_eSPI tft = TFT_eSPI();
 
-#define pcf_ADDR 0x20
+#define pcf_ADDR BOARD_PCF8574_ADDR
 PCF8574 pcf(pcf_ADDR);
 
-#define BTN_UP     6
-#define BTN_DOWN   3
-#define BTN_LEFT   4
-#define BTN_RIGHT  5
-#define BTN_SELECT 7
+#define BTN_UP     BOARD_BUTTON_UP
+#define BTN_DOWN   BOARD_BUTTON_DOWN
+#define BTN_LEFT   BOARD_BUTTON_LEFT
+#define BTN_RIGHT  BOARD_BUTTON_RIGHT
+#define BTN_SELECT BOARD_BUTTON_SELECT
 
 bool feature_exit_requested = false;
 
@@ -235,7 +236,12 @@ void updateActiveSubmenu() {
 }
 
 bool isButtonPressed(int buttonPin) {
+#if BOARD_HAS_PCF8574
   return !pcf.digitalRead(buttonPin);
+#else
+  (void)buttonPin;
+  return false;
+#endif
 }
 
 float currentBatteryVoltage = 0.0;  // Initialize to 0, updated in loop() by readBatteryVoltage()
@@ -1700,8 +1706,8 @@ void handleSubGHzSubmenuButtons() {
         }
 
         if (current_submenu_index == 0) {
-            pinMode(26, INPUT);
-            pinMode(16, INPUT);
+            pinMode(BOARD_CC1101_CSN, OUTPUT);
+            pinMode(BOARD_NRF24_CSN_1, OUTPUT);
             current_submenu_index = 0;
             in_sub_menu = true;
             feature_active = true;
@@ -1737,8 +1743,8 @@ void handleSubGHzSubmenuButtons() {
         }
 
         if (current_submenu_index == 1) {
-            pinMode(26, INPUT);
-            pinMode(16, INPUT);
+            pinMode(BOARD_CC1101_CSN, OUTPUT);
+            pinMode(BOARD_NRF24_CSN_1, OUTPUT);
             current_submenu_index = 1;
             in_sub_menu = true;
             feature_active = true;
@@ -1774,8 +1780,8 @@ void handleSubGHzSubmenuButtons() {
         }
 
         if (current_submenu_index == 2) {
-            pinMode(26, INPUT);
-            pinMode(16, INPUT);
+            pinMode(BOARD_CC1101_CSN, OUTPUT);
+            pinMode(BOARD_NRF24_CSN_1, OUTPUT);
             current_submenu_index = 2;
             in_sub_menu = true;
             feature_active = true;
@@ -1812,8 +1818,8 @@ void handleSubGHzSubmenuButtons() {
         
 
         if (current_submenu_index == 3) {
-            pinMode(26, INPUT);
-            pinMode(16, INPUT);
+            pinMode(BOARD_CC1101_CSN, OUTPUT);
+            pinMode(BOARD_NRF24_CSN_1, OUTPUT);
             current_submenu_index = 3;
             in_sub_menu = true;
             feature_active = true;
@@ -1882,8 +1888,8 @@ void handleSubGHzSubmenuButtons() {
 
                             
                 } else if (current_submenu_index == 0) {
-                    pinMode(26, INPUT);
-                    pinMode(16, INPUT);
+                    pinMode(BOARD_CC1101_GDO2, INPUT);
+                    pinMode(BOARD_CC1101_GDO0, INPUT);
                     current_submenu_index = 0;
                     in_sub_menu = true;
                     feature_active = true;
@@ -1917,8 +1923,8 @@ void handleSubGHzSubmenuButtons() {
                         delay(200);
                     }
                 } else if (current_submenu_index == 1) {
-                    pinMode(26, INPUT);
-                    pinMode(16, INPUT);
+                    pinMode(BOARD_CC1101_GDO2, INPUT);
+                    pinMode(BOARD_CC1101_GDO0, INPUT);
                     current_submenu_index = 1;
                     in_sub_menu = true;
                     feature_active = true;
@@ -1952,8 +1958,8 @@ void handleSubGHzSubmenuButtons() {
                         delay(200);
                     }
                 } else if (current_submenu_index == 3) {
-                    pinMode(26, INPUT);
-                    pinMode(16, INPUT);
+                    pinMode(BOARD_CC1101_GDO2, INPUT);
+                    pinMode(BOARD_CC1101_GDO0, INPUT);
                     current_submenu_index = 3;
                     in_sub_menu = true;
                     feature_active = true;
@@ -1987,8 +1993,8 @@ void handleSubGHzSubmenuButtons() {
                         delay(200);
                     }
                 } else if (current_submenu_index == 2) {
-                    pinMode(26, INPUT);
-                    pinMode(16, INPUT);
+                    pinMode(BOARD_CC1101_GDO2, INPUT);
+                    pinMode(BOARD_CC1101_GDO0, INPUT);
                     current_submenu_index = 2;
                     in_sub_menu = true;
                     feature_active = true;
@@ -3043,6 +3049,7 @@ void setup() {
   //pinMode(BACKLIGHT_PIN, OUTPUT);
   //digitalWrite(BACKLIGHT_PIN, HIGH);
   
+  #if BOARD_HAS_PCF8574
   pcf.begin();
   pcf.pinMode(BTN_UP, INPUT_PULLUP);
   pcf.pinMode(BTN_DOWN, INPUT_PULLUP);
@@ -3056,6 +3063,9 @@ void setup() {
     Serial.print(": ");
     Serial.println(pcf.digitalRead(pin) ? "Released" : "Pressed");
   }
+#else
+  Serial.println("[Board] PCF8574 button expander disabled for this board profile");
+#endif
 
   displayMenu();
   currentBatteryVoltage = readBatteryVoltage();  // Update now that ADC is initialized

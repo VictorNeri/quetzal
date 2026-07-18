@@ -1,14 +1,16 @@
 #ifndef TOUCHSCREEN_H
 #define TOUCHSCREEN_H
 
+#include "board_config.h"
+
 #include <SPI.h>
 #include <XPT2046_Touchscreen.h>
 
-#define XPT2046_CS    33
-#define XPT2046_IRQ   34
-#define XPT2046_MOSI  32
-#define XPT2046_MISO  35
-#define XPT2046_CLK   25
+#define XPT2046_CS    BOARD_TOUCH_CS
+#define XPT2046_IRQ   BOARD_TOUCH_IRQ
+#define XPT2046_MOSI  BOARD_TOUCH_MOSI
+#define XPT2046_MISO  BOARD_TOUCH_MISO
+#define XPT2046_CLK   BOARD_TOUCH_CLK
 
 extern SPIClass touchscreenSPI;
 extern XPT2046_Touchscreen ts;
