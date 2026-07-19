@@ -14,7 +14,7 @@
 void cleanupNRF24();
 
 #include <TFT_eSPI.h> 
-#include <PCF8574.h>
+#include "buttons_compat.h"
 #include <XPT2046_Touchscreen.h>
 
 #include "ble_compat.h"  // Bluedroid on ESP32-DIV V1, NimBLE on NM-CYD-C5
@@ -33,7 +33,7 @@ void cleanupNRF24();
 #define XPT2046_CS    BOARD_TOUCH_CS
 
 extern TFT_eSPI tft;
-extern PCF8574 pcf;
+extern ButtonExpander pcf;
 
 
 namespace BleJammer {

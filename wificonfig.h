@@ -14,11 +14,11 @@ void cleanupSD();
 
 #include <WiFi.h>
 #include <TFT_eSPI.h> 
-#include <PCF8574.h>
+#include "buttons_compat.h"
 #include <XPT2046_Touchscreen.h>
 
 extern TFT_eSPI tft;
-extern PCF8574 pcf;
+extern ButtonExpander pcf;
 
 #define XPT2046_IRQ   BOARD_TOUCH_IRQ
 #define XPT2046_MOSI  BOARD_TOUCH_MOSI

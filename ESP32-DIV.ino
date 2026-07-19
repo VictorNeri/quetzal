@@ -2,7 +2,7 @@
 #include "board_config.h"
 #include <TFT_eSPI.h>
 #include <Wire.h>
-#include <PCF8574.h>
+#include "buttons_compat.h"  // PCF8574 on V1, touch-backed ButtonExpander on C5
 
 #include "Touchscreen.h"
 #include "wificonfig.h"
@@ -16,7 +16,7 @@
 TFT_eSPI tft = TFT_eSPI();
 
 #define pcf_ADDR BOARD_PCF8574_ADDR
-PCF8574 pcf(pcf_ADDR);
+ButtonExpander pcf(pcf_ADDR);
 
 #define BTN_UP     BOARD_BUTTON_UP
 #define BTN_DOWN   BOARD_BUTTON_DOWN
@@ -236,12 +236,8 @@ void updateActiveSubmenu() {
 }
 
 bool isButtonPressed(int buttonPin) {
-#if BOARD_HAS_PCF8574
+  // On the C5 `pcf` is the touch-backed ButtonExpander, so this works there too.
   return !pcf.digitalRead(buttonPin);
-#else
-  (void)buttonPin;
-  return false;
-#endif
 }
 
 float currentBatteryVoltage = 0.0;  // Initialize to 0, updated in loop() by readBatteryVoltage()

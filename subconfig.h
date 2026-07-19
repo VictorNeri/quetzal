@@ -6,7 +6,7 @@
 #include "utils.h"
 #include "arduinoFFT.h"
 #include <TFT_eSPI.h> 
-#include <PCF8574.h>
+#include "buttons_compat.h"
 #include <ELECHOUSE_CC1101_ESP32DIV.h>
 
 #include <RCSwitch.h>
@@ -17,7 +17,7 @@
 #include <Wire.h>
 
 extern TFT_eSPI tft;
-extern PCF8574 pcf;
+extern ButtonExpander pcf;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Radio Switching Support - Pin 16 shared between CC1101 GDO0 and NRF24 CE
