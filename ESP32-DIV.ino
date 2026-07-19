@@ -3034,6 +3034,12 @@ void setup() {
   Serial.begin(115200);
   
   tft.init();
+#if BOARD_DISPLAY_DRIVER_ST7789
+  // The NM-CYD-C5 ST7789 init hardcodes INVON and the TFT_INVERSION_OFF build
+  // flag does not reach TFT_eSPI here, so set inversion off explicitly (colours
+  // otherwise render as a photo-negative).
+  tft.invertDisplay(false);
+#endif
   tft.setRotation(0);
   tft.fillScreen(TFT_BLACK);
 

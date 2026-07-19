@@ -17,11 +17,11 @@ extern XPT2046_Touchscreen ts;
 
 // XPT2046 raw-ADC calibration bounds. The mapping sites use X as
 // map(raw, TS_MINX, TS_MAXX, ...) and Y as map(raw, TS_MAXY, TS_MINY, ...).
-// The NM-CYD-C5 panel/digitizer is mounted 180 degrees from the original
-// ESP32-DIV, so swap min<->max on both axes to flip touch the right way up.
+// On the NM-CYD-C5 the Y axis is flipped versus the original ESP32-DIV (touch
+// read upside-down), but X is oriented the same. So swap only the Y bounds.
 #if BOARD_DISPLAY_DRIVER_ST7789
-#define TS_MINX 3800
-#define TS_MAXX 300
+#define TS_MINX 300
+#define TS_MAXX 3800
 #define TS_MINY 3800
 #define TS_MAXY 300
 #else
