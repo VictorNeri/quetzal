@@ -14,3 +14,4 @@ idf_component.yml
 idf_component.yml.orig
 .vscode/c_cpp_properties.json
 *.ino.cpp
+.vscode/launch.json
