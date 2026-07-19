@@ -1,3 +1,9 @@
+#ifndef USER_SETUP_LOADED
+#define USER_SETUP_LOADED
+#endif
+
+#include "board_config.h"
+
 /* 
   Rui Santos & Sara Santos - Random Nerd Tutorials
 
@@ -53,7 +59,15 @@
 //#define RPI_DISPLAY_TYPE // 20MHz maximum SPI
 
 // Only define one driver, the other ones must be commented out
+#if BOARD_DISPLAY_DRIVER_ILI9341
 #define ILI9341_DRIVER       // Generic driver for common displays
+#endif
+#if BOARD_DISPLAY_DRIVER_ST7789
+#define ST7789_DRIVER        // NM-CYD-C5 default display
+// TFT_eSPI's ST7789 driver enables inversion by default; this NM-CYD-C5 panel
+// shows correct colours only with inversion OFF.
+#define TFT_INVERSION_OFF
+#endif
 //#define ILI9341_2_DRIVER     // Alternative ILI9341 driver, see https://github.com/Bodmer/TFT_eSPI/issues/1172
 //#define ST7735_DRIVER      // Define additional parameters below for this display
 //#define ILI9163_DRIVER     // Define additional parameters below for this display
@@ -139,7 +153,7 @@
 // driven with a PWM signal or turned OFF/ON then this must be handled by the user
 // sketch. e.g. with digitalWrite(TFT_BL, LOW);
 
-#define TFT_BL   4            // LED back-light control pin
+#define TFT_BL   BOARD_TFT_BL            // LED back-light control pin
 #define TFT_BACKLIGHT_ON HIGH  // Level to turn ON back-light (HIGH or LOW)
 
 
@@ -214,15 +228,15 @@
 // For ESP32 Dev board (only tested with ILI9341 display)
 // The hardware SPI can be mapped to any pins
 
-#define TFT_MISO 12
-#define TFT_MOSI 13
-#define TFT_SCLK 14
-#define TFT_CS   15  // Chip select control pin
-#define TFT_DC    2  // Data Command control pin
+#define TFT_MISO BOARD_TFT_MISO
+#define TFT_MOSI BOARD_TFT_MOSI
+#define TFT_SCLK BOARD_TFT_SCLK
+#define TFT_CS   BOARD_TFT_CS  // Chip select control pin
+#define TFT_DC   BOARD_TFT_DC  // Data Command control pin
 //#define TFT_RST   4  // Reset pin (could connect to RST pin)
-#define TFT_RST  0 // Set TFT_RST to -1 if display RESET is connected to ESP32 board RST
+#define TFT_RST  BOARD_TFT_RST // Set TFT_RST to -1 if display RESET is connected to ESP32 board RST
 
-#define TOUCH_CS 33     // Chip select pin (T_CS) of touch screen
+#define TOUCH_CS BOARD_TOUCH_CS     // Chip select pin (T_CS) of touch screen
 
 // For ESP32 Dev board (only tested with GC9A01 display)
 // The hardware SPI can be mapped to any pins
@@ -369,8 +383,12 @@
 // #define SPI_FREQUENCY  20000000
 //#define SPI_FREQUENCY  27000000
 // #define SPI_FREQUENCY  40000000
-#define SPI_FREQUENCY  55000000 // STM32 SPI1 only (SPI2 maximum is 27MHz)
 // #define SPI_FREQUENCY  80000000
+#if BOARD_DISPLAY_DRIVER_ST7789
+#define SPI_FREQUENCY  20000000 // NM-CYD-C5 ST7789 over shared FSPI (vendor spec)
+#else
+#define SPI_FREQUENCY  55000000 // Original ESP32-DIV ILI9341
+#endif
 
 // Optional reduced SPI frequency for reading TFT
 #define SPI_READ_FREQUENCY  20000000
@@ -380,8 +398,14 @@
 
 // The ESP32 has 2 free SPI ports i.e. VSPI and HSPI, the VSPI is the default.
 // If the VSPI port is in use and pins are not accessible (e.g. TTGO T-Beam)
-// then uncomment the following line:
+// then uncomment the following line.
+// The ESP32-C5 has no HSPI/VSPI split (it uses FSPI/SPI2); defining USE_HSPI_PORT
+// there makes the C5 processor take the SPIClass(HSPI) path, which does not drive
+// the panel ("draws once then freezes"). Leave it undefined so the C5 uses the
+// default FSPI SPI object. The original ESP32-DIV keeps its TFT on HSPI.
+#if !BOARD_DISPLAY_DRIVER_ST7789
 #define USE_HSPI_PORT
+#endif
 
 // Comment out the following #define if "SPI Transactions" do not need to be
 // supported. When commented out the code size will be smaller and sketches will

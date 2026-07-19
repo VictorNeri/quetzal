@@ -3,6 +3,17 @@
 #include "icon.h"
 #include "Touchscreen.h"
 #include <WiFi.h>  // For WiFi.RSSI() and WiFi.status()
+#include "esp_idf_version.h"  // ESP_IDF_VERSION_MAJOR for API-compat guards
+
+// Vertical-scroll command opcodes. TFT_eSPI only defines the ILI9341_* names when
+// the ILI9341 driver is selected (original board). The NM-CYD-C5 uses the ST7789
+// driver, which shares the same standard MIPI DCS opcodes, so provide fallbacks.
+#ifndef ILI9341_VSCRDEF
+#define ILI9341_VSCRDEF  0x33  // Vertical Scrolling Definition
+#endif
+#ifndef ILI9341_VSCRSADD
+#define ILI9341_VSCRSADD 0x37  // Vertical Scrolling Start Address
+#endif
 
 
 /*
@@ -124,6 +135,9 @@ void printWrappedText(int x, int y, int maxWidth, const char* text) {
  * 
  */
 
+#if ESP_IDF_VERSION_MAJOR < 5
+// Legacy ESP32 internal temperature sensor (note the upstream typo in the name).
+// Removed in ESP-IDF 5; the C5 build uses the Arduino core's temperatureRead().
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -132,6 +146,7 @@ uint8_t temprature_sens_read();
 }
 #endif
 uint8_t temprature_sens_read();
+#endif
 
 unsigned long lastStatusBarUpdate = 0;
 const int STATUS_BAR_UPDATE_INTERVAL = 1000; 
@@ -141,9 +156,14 @@ float readBatteryVoltage() {
   static bool adcInitialized = false;
   static unsigned long lastDebugPrint = 0;
 
+#if BOARD_BATTERY_ADC_PIN < 0
+  // No battery divider on this board (e.g. NM-CYD-C5; GPIO36 does not exist on
+  // the C5). Report a nominal "full" voltage instead of spamming ADC errors.
+  return 4.2f;
+#else
   // Initialize ADC attenuation on first call (11dB for 0-3.3V range)
   if (!adcInitialized) {
-    analogSetPinAttenuation(36, ADC_11db);
+    analogSetPinAttenuation(BOARD_BATTERY_ADC_PIN, ADC_11db);
     adcInitialized = true;
     Serial.println("[BATTERY] ADC initialized on GPIO36 with 11dB attenuation");
   }
@@ -152,7 +172,7 @@ float readBatteryVoltage() {
   uint32_t sum = 0;
 
   for (int i = 0; i < sampleCount; i++) {
-    sum += analogReadMilliVolts(36);  // Use calibrated millivolt reading
+    sum += analogReadMilliVolts(BOARD_BATTERY_ADC_PIN);  // Use calibrated millivolt reading
     delayMicroseconds(500);  // Faster sampling
   }
 
@@ -170,11 +190,17 @@ float readBatteryVoltage() {
   }
 
   return voltage;
+#endif // BOARD_BATTERY_ADC_PIN
 }
 
 float readInternalTemperature() {
-  float temperature = ((temprature_sens_read() - 32) / 1.8); 
+#if ESP_IDF_VERSION_MAJOR >= 5
+  // Arduino core 3.x returns the internal sensor reading directly in Celsius.
+  return temperatureRead();
+#else
+  float temperature = ((temprature_sens_read() - 32) / 1.8);
   return temperature;
+#endif
 }
 
 // Check if SD card is available

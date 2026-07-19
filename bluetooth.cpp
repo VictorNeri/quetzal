@@ -28,22 +28,22 @@ void cleanupNRF24() {
     delay(10);
 
     // Release GPIO 5 (CSN_PIN_3) - set to INPUT so SD can take it
-    pinMode(5, INPUT);
+    pinMode(BOARD_NRF24_CSN_3, INPUT);
 
     // Also release radio3's CE pin (GPIO 4) to be safe
-    pinMode(4, INPUT);
+    pinMode(BOARD_NRF24_CE_3, INPUT);
 
     // Deselect radio1 and radio2 CSN pins to prevent SPI conflicts
-    pinMode(17, OUTPUT);
-    digitalWrite(17, HIGH);  // CSN_PIN_1 HIGH = deselected
-    pinMode(27, OUTPUT);
-    digitalWrite(27, HIGH);  // CSN_PIN_2 HIGH = deselected
+    pinMode(BOARD_NRF24_CSN_1, OUTPUT);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);  // CSN_PIN_1 HIGH = deselected
+    pinMode(BOARD_NRF24_CSN_2, OUTPUT);
+    digitalWrite(BOARD_NRF24_CSN_2, HIGH);  // CSN_PIN_2 HIGH = deselected
 
     // Release GPIO 16 and 26 for CC1101 SubGHz to reclaim
     // These pins are shared: GPIO 16 = CC1101 GDO0 / NRF24 CE_PIN_1
     //                        GPIO 26 = CC1101 GDO2 / NRF24 CE_PIN_2
-    pinMode(16, INPUT);  // Release for CC1101 GDO0
-    pinMode(26, INPUT);  // Release for CC1101 GDO2
+    pinMode(BOARD_CC1101_GDO0, INPUT);  // Release for CC1101 GDO0
+    pinMode(BOARD_CC1101_GDO2, INPUT);  // Release for CC1101 GDO2
 
     Serial.println("[NRF24] Cleanup complete - GPIO 5/16/26 released");
 }
@@ -55,11 +55,11 @@ void cleanupNRF24() {
 
 namespace BleSpoofer {
 
-#define BTN_UP     6
-#define BTN_DOWN   3
-#define BTN_LEFT   4
-#define BTN_RIGHT  5
-#define BTN_SELECT 7
+#define BTN_UP     BOARD_BUTTON_UP
+#define BTN_DOWN   BOARD_BUTTON_DOWN
+#define BTN_LEFT   BOARD_BUTTON_LEFT
+#define BTN_RIGHT  BOARD_BUTTON_RIGHT
+#define BTN_SELECT BOARD_BUTTON_SELECT
 
 #define SCREEN_HEIGHT 250
 #define LINE_HEIGHT 12
@@ -150,18 +150,12 @@ BLEAdvertisementData getAdvertismentData() {
   BLEAdvertisementData oAdvertisementData = BLEAdvertisementData();
 
   if (device_choice == 0) {
-    oAdvertisementData.addData(std::string((char*)DEVICES[device_index], 31));
+    bleCompatAddRawAdvData(oAdvertisementData, (const uint8_t*)DEVICES[device_index], 31);
   }
 
   int adv_type_choice = random(3);
 
-  if (adv_type_choice == 0) {
-    pAdvertising->setAdvertisementType(ADV_TYPE_IND);
-  } else if (adv_type_choice == 1) {
-    pAdvertising->setAdvertisementType(ADV_TYPE_SCAN_IND);
-  } else {
-    pAdvertising->setAdvertisementType(ADV_TYPE_NONCONN_IND);
-  }
+  bleCompatSetAdvType(pAdvertising, adv_type_choice);
 
   return oAdvertisementData;
 }
@@ -487,7 +481,7 @@ void toggleAdvertising() {
     updateSpoofer();
   } else {
     if (attack_state == 1) {
-      esp_bd_addr_t dummy_addr = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+      uint8_t dummy_addr[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
       for (int i = 0; i < 6; i++) {
         dummy_addr[i] = random(256);
         if (i == 0) {
@@ -496,13 +490,12 @@ void toggleAdvertising() {
       }
 
       BLEAdvertisementData oAdvertisementData = getAdvertismentData();
-      pAdvertising->setDeviceAddress(dummy_addr, BLE_ADDR_TYPE_RANDOM);
+      bleCompatSetAdvRandomAddress(pAdvertising, dummy_addr);
       pAdvertising->addServiceUUID(devices_uuid);
       pAdvertising->setAdvertisementData(oAdvertisementData);
       pAdvertising->setMinInterval(0x20);
       pAdvertising->setMaxInterval(0x20);
-      pAdvertising->setMinPreferred(0x20);
-      pAdvertising->setMaxPreferred(0x20);
+      bleCompatSetPreferredInterval(pAdvertising, 0x20, 0x20);
       pAdvertising->start();
       delay(delayMillisecond);
       //pAdvertising->stop();
@@ -627,11 +620,11 @@ void spooferSetup() {
   Printspoofer("[+] System Ready!", TFT_GREEN, true);
 
   BLEDevice::init("AirPods 69");
-  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P9);
+  bleCompatSetAdvTxPowerMax();
   BLEServer *pServer = BLEDevice::createServer();
   pAdvertising = pServer->getAdvertising();
-  esp_bd_addr_t null_addr = {0xFE, 0xED, 0xC0, 0xFF, 0xEE, 0x69};
-  pAdvertising->setDeviceAddress(null_addr, BLE_ADDR_TYPE_RANDOM);
+  uint8_t null_addr[6] = {0xFE, 0xED, 0xC0, 0xFF, 0xEE, 0x69};
+  bleCompatSetAdvRandomAddress(pAdvertising, null_addr);
   //delay(500);
 
   pcf.pinMode(BTN_UP, INPUT_PULLUP);
@@ -669,9 +662,9 @@ void spooferLoop() {
 
 namespace SourApple {
 
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEServer.h>
+// BLE headers are already pulled in globally via bleconfig.h -> ble_compat.h.
+// (They must not be re-included inside a namespace: on NimBLE that would nest
+// the library's classes inside SourApple.)
 
 static bool uiDrawn = false;
 
@@ -837,7 +830,7 @@ BLEAdvertisementData getOAdvertisementData() {
   packet[i++] =  0x10;                              // Type ???
   esp_fill_random(&packet[i], 3);
 
-  advertisementData.addData(std::string((char *)packet, 17));
+  bleCompatAddRawAdvData(advertisementData, packet, 17);
   return advertisementData;
 }
 
@@ -858,15 +851,13 @@ void sourappleSetup() {
   tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
 
   BLEDevice::init("");
-  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_P9);
-  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P9);
-  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_SCAN , ESP_PWR_LVL_P9);
+  bleCompatSetAllTxPowerMax();
 
   BLEServer *pServer = BLEDevice::createServer();
   Advertising = pServer->getAdvertising();
 
-  esp_bd_addr_t null_addr = {0xFE, 0xED, 0xC0, 0xFF, 0xEE, 0x69};
-  Advertising->setDeviceAddress(null_addr, BLE_ADDR_TYPE_RANDOM);
+  uint8_t null_addr[6] = {0xFE, 0xED, 0xC0, 0xFF, 0xEE, 0x69};
+  bleCompatSetAdvRandomAddress(Advertising, null_addr);
 
 
 }
@@ -875,7 +866,7 @@ void sourappleLoop() {
   tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
   runUI();
 
-  esp_bd_addr_t dummy_addr = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  uint8_t dummy_addr[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   for (int i = 0; i < 6; i++) {
     dummy_addr[i] = random(256);
     if (i == 0) {
@@ -884,14 +875,13 @@ void sourappleLoop() {
   }
   BLEAdvertisementData oAdvertisementData = getOAdvertisementData();
 
-  Advertising->setDeviceAddress(dummy_addr, BLE_ADDR_TYPE_RANDOM);
+  bleCompatSetAdvRandomAddress(Advertising, dummy_addr);
   Advertising->addServiceUUID(device_uuid);
   Advertising->setAdvertisementData(oAdvertisementData);
 
   Advertising->setMinInterval(0x20);
   Advertising->setMaxInterval(0x20);
-  Advertising->setMinPreferred(0x20);
-  Advertising->setMaxPreferred(0x20);
+  bleCompatSetPreferredInterval(Advertising, 0x20, 0x20);
 
   Advertising->start();
 
@@ -909,18 +899,18 @@ void sourappleLoop() {
 
 namespace BleJammer {
 
-#define CE_PIN_1  16
-#define CSN_PIN_1 17
-#define CE_PIN_2  26
-#define CSN_PIN_2 27
-#define CE_PIN_3  4
-#define CSN_PIN_3 5
+#define CE_PIN_1  BOARD_NRF24_CE_1
+#define CSN_PIN_1 BOARD_NRF24_CSN_1
+#define CE_PIN_2  BOARD_NRF24_CE_2
+#define CSN_PIN_2 BOARD_NRF24_CSN_2
+#define CE_PIN_3  BOARD_NRF24_CE_3
+#define CSN_PIN_3 BOARD_NRF24_CSN_3
 
-#define BTN_UP       6
-#define BTN_DOWN     3
-#define BTN_LEFT     4
-#define BTN_RIGHT    5
-#define BTN_SELECT   7
+#define BTN_UP       BOARD_BUTTON_UP
+#define BTN_DOWN     BOARD_BUTTON_DOWN
+#define BTN_LEFT     BOARD_BUTTON_LEFT
+#define BTN_RIGHT    BOARD_BUTTON_RIGHT
+#define BTN_SELECT   BOARD_BUTTON_SELECT
 
 RF24 radio1(CE_PIN_1, CSN_PIN_1, 16000000);
 RF24 radio2(CE_PIN_2, CSN_PIN_2, 16000000);
@@ -1145,8 +1135,8 @@ void blejamSetup() {
   // ALWAYS reset SPI bus and deselect CC1101 before NRF24 init
   SPI.end();
   delay(10);
-  pinMode(27, OUTPUT);
-  digitalWrite(27, HIGH);        // Deselect CC1101 CSN
+  pinMode(BOARD_CC1101_CSN, OUTPUT);
+  digitalWrite(BOARD_CC1101_CSN, HIGH);        // Deselect CC1101 CSN
 
   float currentBatteryVoltage = readBatteryVoltage();
   drawStatusBar(currentBatteryVoltage, false);
@@ -1205,10 +1195,10 @@ void blejamLoop() {
 
 namespace BleScan {
 
-#define BTN_UP 6
-#define BTN_DOWN 3
-#define BTN_RIGHT 5
-#define BTN_LEFT 4
+#define BTN_UP BOARD_BUTTON_UP
+#define BTN_DOWN BOARD_BUTTON_DOWN
+#define BTN_RIGHT BOARD_BUTTON_RIGHT
+#define BTN_LEFT BOARD_BUTTON_LEFT
 
 #define SCREEN_WIDTH  240
 #define SCREENHEIGHT 320
@@ -1266,7 +1256,14 @@ void startBLEScan() {
   isScanning = true;
   screenNeedsUpdate = true;
   fullScreenUpdate = true;
+#if BOARD_BLE_STACK_NIMBLE
+  // NimBLE start() takes milliseconds and returns a bool; results are fetched
+  // separately. Bluedroid start() takes seconds and returns the results.
+  bleScan->start(5000, false);
+  bleResults = bleScan->getResults();
+#else
   bleResults = bleScan->start(5, false);
+#endif
   isScanning = false;
   screenNeedsUpdate = true;
 }
@@ -1348,7 +1345,11 @@ void updateBLEList() {
     int yPos = 15 + i * 18;
     tft.fillRect(0, yPos - 2 + yshift, tft.width(), 18, TFT_BLACK);
 
+#if BOARD_BLE_STACK_NIMBLE
+    const BLEAdvertisedDevice& device = *bleResults.getDevice(index);
+#else
     BLEAdvertisedDevice device = bleResults.getDevice(index);
+#endif
     String deviceName = device.getName().length() > 0 ? device.getName().c_str() : "Unknown Device";
 
     tft.setCursor(10, yPos + yshift);
@@ -1369,7 +1370,11 @@ void displayBLEDetails() {
   tft.setCursor(35, 24);
   tft.print("Device Details:");
 
+#if BOARD_BLE_STACK_NIMBLE
+  const BLEAdvertisedDevice& device = *bleResults.getDevice(currentIndex);
+#else
   BLEAdvertisedDevice device = bleResults.getDevice(currentIndex);
+#endif
   String deviceName = device.getName().length() > 0 ? device.getName().c_str() : "Unknown Device";
   String address = device.getAddress().toString().c_str();
   int rssi = device.getRSSI();
@@ -1542,9 +1547,9 @@ void bleScanLoop() {
 
 namespace Scanner {
 
-#define CE  16
-#define CSN 17
-#define BUTTON 27
+#define CE  BOARD_NRF24_CE_1
+#define CSN BOARD_NRF24_CSN_1
+#define BUTTON BOARD_CC1101_CSN
 
 #define CHANNELS  128
 int channel[CHANNELS];
@@ -1554,7 +1559,7 @@ uint8_t values[N];
 
 static bool uiDrawn = false;
 
-#define BTN_SELECT 7
+#define BTN_SELECT BOARD_BUTTON_SELECT
 
 #define _NRF24_CONFIG   0x00
 #define _NRF24_EN_AA    0x01
@@ -1612,7 +1617,7 @@ byte getRegister(byte r) {
   digitalWrite(CSN, LOW);
   SPI.transfer(r & 0x1F);
   c = SPI.transfer(0);
-  digitalWrite(CSN, HIGH);
+  digitalWrite(BOARD_NRF24_CSN_1, HIGH);
   return c;
 }
 
@@ -1624,7 +1629,7 @@ void setRegister(byte r, byte v) {
   digitalWrite(CSN, LOW);
   SPI.transfer((r & 0x1F) | 0x20);
   SPI.transfer(v);
-  digitalWrite(CSN, HIGH);
+  digitalWrite(BOARD_NRF24_CSN_1, HIGH);
 }
 
 void setChannel(uint8_t channel) {
@@ -1641,7 +1646,7 @@ void powerDown() {
 }
 
 void enable() {
-  digitalWrite(CE, HIGH);
+  digitalWrite(BOARD_NRF24_CSN_1, HIGH);
 }
 
 void disable() {
@@ -2108,8 +2113,8 @@ void scannerSetup() {
   // ALWAYS reset SPI bus and deselect CC1101 before nRF24 init
   SPI.end();                                // Release SPI bus completely
   delay(10);
-  pinMode(27, OUTPUT);                      // CC1101 CSN pin
-  digitalWrite(27, HIGH);                   // Deselect CC1101
+  pinMode(BOARD_CC1101_CSN, OUTPUT);                      // CC1101 CSN pin
+  digitalWrite(BOARD_CC1101_CSN, HIGH);                   // Deselect CC1101
   pinMode(CE, OUTPUT);                      // Reconfigure pin 16 as OUTPUT for nRF24 CE
   digitalWrite(CE, LOW);                    // Start with CE low
   pinMode(CSN, OUTPUT);                     // nRF24 CSN
@@ -2120,7 +2125,7 @@ void scannerSetup() {
   Print(" ", TFT_GREEN, false);
   Print("[*] 2.4GHz Scanner Initialized...", TFT_GREEN, false);
 
-  SPI.begin(18, 19, 23, 17);
+  SPI.begin(BOARD_RADIO_SCK, BOARD_RADIO_MISO, BOARD_RADIO_MOSI, BOARD_NRF24_CSN_1);
   SPI.setDataMode(SPI_MODE0);
   SPI.setFrequency(10000000);
   SPI.setBitOrder(MSBFIRST);
@@ -2128,8 +2133,8 @@ void scannerSetup() {
   // Reinitialize touch SPI after reconfiguring main SPI bus
   setupTouchscreen();
 
-  pinMode(CE, OUTPUT);
-  pinMode(CSN, OUTPUT);
+  pinMode(BOARD_NRF24_CSN_1, OUTPUT);
+  pinMode(BOARD_NRF24_CSN_1, OUTPUT);
   pinMode(BUTTON, INPUT_PULLUP);
 
   pcf.pinMode(BTN_SELECT, INPUT_PULLUP);
@@ -2174,8 +2179,8 @@ void scannerLoop() {
 
 namespace Analyzer {
 
-#define ANA_CE  16
-#define ANA_CSN 17
+#define ANA_CE  BOARD_NRF24_CE_1
+#define ANA_CSN BOARD_NRF24_CSN_1
 #define ANA_CHANNELS 85           // WiFi-only: 2400-2484 MHz (same as Scanner)
 
 // Data arrays
@@ -2229,7 +2234,7 @@ byte anaGetRegister(byte r) {
     digitalWrite(ANA_CSN, LOW);
     SPI.transfer(r & 0x1F);
     c = SPI.transfer(0);
-    digitalWrite(ANA_CSN, HIGH);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);
     return c;
 }
 
@@ -2237,7 +2242,7 @@ void anaSetRegister(byte r, byte v) {
     digitalWrite(ANA_CSN, LOW);
     SPI.transfer((r & 0x1F) | 0x20);
     SPI.transfer(v);
-    digitalWrite(ANA_CSN, HIGH);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);
 }
 
 void anaPowerUp() {
@@ -2246,12 +2251,12 @@ void anaPowerUp() {
 }
 
 void anaEnable() {
-    digitalWrite(ANA_CE, HIGH);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);
 }
 
 void anaSetRX() {
     anaSetRegister(_ANA_NRF24_CONFIG, anaGetRegister(_ANA_NRF24_CONFIG) | 0x01);
-    digitalWrite(ANA_CE, HIGH);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);
     delayMicroseconds(100);
 }
 
@@ -2595,15 +2600,15 @@ void analyzerSetup() {
     // ALWAYS reset SPI bus and deselect CC1101 before nRF24 init
     SPI.end();                                // Release SPI bus completely
     delay(10);
-    pinMode(27, OUTPUT);                      // CC1101 CSN pin
-    digitalWrite(27, HIGH);                   // Deselect CC1101
+    pinMode(BOARD_CC1101_CSN, OUTPUT);                      // CC1101 CSN pin
+    digitalWrite(BOARD_CC1101_CSN, HIGH);                   // Deselect CC1101
     pinMode(ANA_CE, OUTPUT);                  // Reconfigure pin 16 as OUTPUT for nRF24 CE
     digitalWrite(ANA_CE, LOW);                // Start with CE low
     pinMode(ANA_CSN, OUTPUT);                 // nRF24 CSN
     digitalWrite(ANA_CSN, HIGH);              // Deselect nRF24 initially
 
     // Initialize SPI and NRF24
-    SPI.begin(18, 19, 23, 17);
+    SPI.begin(BOARD_RADIO_SCK, BOARD_RADIO_MISO, BOARD_RADIO_MOSI, BOARD_NRF24_CSN_1);
     SPI.setDataMode(SPI_MODE0);
     SPI.setFrequency(10000000);
     SPI.setBitOrder(MSBFIRST);
@@ -2611,8 +2616,8 @@ void analyzerSetup() {
     // Reinitialize touch SPI after reconfiguring main SPI bus
     setupTouchscreen();
 
-    pinMode(ANA_CE, OUTPUT);
-    pinMode(ANA_CSN, OUTPUT);
+    pinMode(BOARD_NRF24_CSN_1, OUTPUT);
+    pinMode(BOARD_NRF24_CSN_1, OUTPUT);
 
     anaDisable();
     anaPowerUp();
@@ -2702,7 +2707,7 @@ byte wlanGetReg(byte reg) {
     digitalWrite(WLAN_CSN, LOW);
     SPI.transfer(reg & 0x1F);
     val = SPI.transfer(0);
-    digitalWrite(WLAN_CSN, HIGH);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);
     return val;
 }
 
@@ -2710,7 +2715,7 @@ void wlanSetReg(byte reg, byte val) {
     digitalWrite(WLAN_CSN, LOW);
     SPI.transfer((reg & 0x1F) | 0x20);
     SPI.transfer(val);
-    digitalWrite(WLAN_CSN, HIGH);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);
 }
 
 void wlanSetChannel(byte ch) {
@@ -2728,7 +2733,7 @@ void wlanPowerDown() {
 
 void wlanEnableRX() {
     wlanSetReg(NRF_CONFIG, wlanGetReg(NRF_CONFIG) | 0x01);  // PRIM_RX
-    digitalWrite(WLAN_CE, HIGH);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);
     delayMicroseconds(130);
 }
 
@@ -2916,25 +2921,25 @@ void scanSignals() {
     digitalWrite(CSN, LOW);
     SPI.transfer(0x00);  // Read CONFIG
     byte cfg = SPI.transfer(0);
-    digitalWrite(CSN, HIGH);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);
 
     digitalWrite(CSN, LOW);
     SPI.transfer(0x20);  // Write CONFIG
     SPI.transfer(cfg | 0x02);  // PWR_UP
-    digitalWrite(CSN, HIGH);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);
     delayMicroseconds(1500);  // Power up delay
 
     // Disable auto-ack
     digitalWrite(CSN, LOW);
     SPI.transfer(0x21);  // Write EN_AA (reg 0x01)
     SPI.transfer(0x00);
-    digitalWrite(CSN, HIGH);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);
 
     // RF_SETUP: 2Mbps, max power
     digitalWrite(CSN, LOW);
     SPI.transfer(0x26);  // Write RF_SETUP (reg 0x06)
     SPI.transfer(0x0F);
-    digitalWrite(CSN, HIGH);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);
 
     // Scan each WiFi channel - use Scanner's scanChannels() pattern
     for (int wifiCh = 0; wifiCh < 13; wifiCh++) {
@@ -2949,18 +2954,18 @@ void scanSignals() {
                 digitalWrite(CSN, LOW);
                 SPI.transfer(0x25);  // Write RF_CH
                 SPI.transfer(nrfCh);
-                digitalWrite(CSN, HIGH);
+                digitalWrite(BOARD_NRF24_CSN_1, HIGH);
 
                 // 2. setRX(): Set PRIM_RX + enable + delay (like Scanner::setRX)
                 digitalWrite(CSN, LOW);
                 SPI.transfer(0x00);  // Read CONFIG
                 cfg = SPI.transfer(0);
-                digitalWrite(CSN, HIGH);
+                digitalWrite(BOARD_NRF24_CSN_1, HIGH);
 
                 digitalWrite(CSN, LOW);
                 SPI.transfer(0x20);  // Write CONFIG
                 SPI.transfer(cfg | 0x03);  // PWR_UP + PRIM_RX
-                digitalWrite(CSN, HIGH);
+                digitalWrite(BOARD_NRF24_CSN_1, HIGH);
 
                 digitalWrite(CE, HIGH);  // enable
                 delayMicroseconds(130);  // Let RPD settle
@@ -2970,7 +2975,7 @@ void scanSignals() {
                 digitalWrite(CSN, LOW);
                 SPI.transfer(0x09);  // Read RPD
                 byte rpd = SPI.transfer(0);
-                digitalWrite(CSN, HIGH);
+                digitalWrite(BOARD_NRF24_CSN_1, HIGH);
 
                 if (rpd & 0x01) {
                     detections++;
@@ -3065,7 +3070,7 @@ void drawSignalBars() {
 void initJammerRadio() {
     // Ensure pins are ready
     digitalWrite(WLAN_CE, LOW);
-    digitalWrite(WLAN_CSN, HIGH);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);
     delay(5);
 
     // Power up
@@ -3139,13 +3144,13 @@ void checkButtons() {
     unsigned long currentTime = millis();
 
     // UP = Toggle jammer
-    if (pcf.digitalRead(6) == LOW && currentTime - lastButtonPressTime > debounceDelay) {
+    if (pcf.digitalRead(BTN_UP) == LOW && currentTime - lastButtonPressTime > debounceDelay) {
         jammerToggleRequested = true;
         lastButtonPressTime = currentTime;
     }
 
     // RIGHT = Next WiFi channel
-    if (pcf.digitalRead(5) == LOW && currentTime - lastButtonPressTime > debounceDelay) {
+    if (pcf.digitalRead(BTN_RIGHT) == LOW && currentTime - lastButtonPressTime > debounceDelay) {
         currentWiFiChannel++;
         if (currentWiFiChannel > 13) currentWiFiChannel = ALL_CHANNELS_MODE;
         if (jammerActive) {
@@ -3162,7 +3167,7 @@ void checkButtons() {
     }
 
     // LEFT = Previous WiFi channel
-    if (pcf.digitalRead(4) == LOW && currentTime - lastButtonPressTime > debounceDelay) {
+    if (pcf.digitalRead(BTN_LEFT) == LOW && currentTime - lastButtonPressTime > debounceDelay) {
         currentWiFiChannel--;
         if (currentWiFiChannel < 0) currentWiFiChannel = 13;
         if (jammerActive) {
@@ -3198,11 +3203,11 @@ void wlanjammerSetup() {
     // ALWAYS reset SPI bus and deselect CC1101 before NRF24 init
     SPI.end();
     delay(10);
-    pinMode(27, OUTPUT);
-    digitalWrite(27, HIGH);        // Deselect CC1101 CSN
+    pinMode(BOARD_CC1101_CSN, OUTPUT);
+    digitalWrite(BOARD_CC1101_CSN, HIGH);        // Deselect CC1101 CSN
 
     // Initialize SPI for NRF24 - EXACT same as working Analyzer!
-    SPI.begin(18, 19, 23, 17);
+    SPI.begin(BOARD_RADIO_SCK, BOARD_RADIO_MISO, BOARD_RADIO_MOSI, BOARD_NRF24_CSN_1);
     SPI.setDataMode(SPI_MODE0);
     SPI.setFrequency(10000000);
     SPI.setBitOrder(MSBFIRST);
@@ -3211,14 +3216,14 @@ void wlanjammerSetup() {
     setupTouchscreen();
 
     // Initialize radio pins
-    pinMode(WLAN_CE, OUTPUT);
+    pinMode(BOARD_NRF24_CSN_1, OUTPUT);
     pinMode(WLAN_CSN, OUTPUT);
 
     // Initialize PCF buttons
-    pcf.pinMode(4, INPUT_PULLUP);  // LEFT
-    pcf.pinMode(5, INPUT_PULLUP);  // RIGHT
-    pcf.pinMode(6, INPUT_PULLUP);  // UP
-    pcf.pinMode(7, INPUT_PULLUP);  // SELECT
+    pcf.pinMode(BTN_LEFT, INPUT_PULLUP);  // LEFT
+    pcf.pinMode(BTN_RIGHT, INPUT_PULLUP);  // RIGHT
+    pcf.pinMode(BTN_UP, INPUT_PULLUP);  // UP
+    pcf.pinMode(BTN_SELECT, INPUT_PULLUP);  // SELECT
 
     jammerActive = false;
     currentWiFiChannel = ALL_CHANNELS_MODE;
@@ -3243,7 +3248,7 @@ void wlanjammerSetup() {
 
     // Initialize radio using EXACT same pattern as working Scanner scannerSetup()
     // CRITICAL: Must init SPI first - this was missing!
-    SPI.begin(18, 19, 23, 17);
+    SPI.begin(BOARD_RADIO_SCK, BOARD_RADIO_MISO, BOARD_RADIO_MOSI, BOARD_NRF24_CSN_1);
     SPI.setDataMode(SPI_MODE0);
     SPI.setFrequency(10000000);
     SPI.setBitOrder(MSBFIRST);
@@ -3281,7 +3286,7 @@ void wlanjammerSetup() {
 
 void wlanjammerLoop() {
     // Check for exit
-    if (pcf.digitalRead(7) == LOW) {
+    if (pcf.digitalRead(BTN_SELECT) == LOW) {
         if (jammerActive) {
             stopJamming();
         }
@@ -3339,18 +3344,18 @@ void wlanjammerLoop() {
 
 namespace ProtoKill {
 
-#define CE_PIN_1  16
-#define CSN_PIN_1 17
-#define CE_PIN_2  26
-#define CSN_PIN_2 27
-#define CE_PIN_3  4
-#define CSN_PIN_3 5
+#define CE_PIN_1  BOARD_NRF24_CE_1
+#define CSN_PIN_1 BOARD_NRF24_CSN_1
+#define CE_PIN_2  BOARD_NRF24_CE_2
+#define CSN_PIN_2 BOARD_NRF24_CSN_2
+#define CE_PIN_3  BOARD_NRF24_CE_3
+#define CSN_PIN_3 BOARD_NRF24_CSN_3
 
-#define BTN_UP       6
-#define BTN_DOWN     3
-#define BTN_LEFT     4
-#define BTN_RIGHT    5
-#define BTN_SELECT   7
+#define BTN_UP       BOARD_BUTTON_UP
+#define BTN_DOWN     BOARD_BUTTON_DOWN
+#define BTN_LEFT     BOARD_BUTTON_LEFT
+#define BTN_RIGHT    BOARD_BUTTON_RIGHT
+#define BTN_SELECT   BOARD_BUTTON_SELECT
 
 RF24 radio1(CE_PIN_1, CSN_PIN_1, 16000000);
 RF24 radio2(CE_PIN_2, CSN_PIN_2, 16000000);
@@ -3711,6 +3716,11 @@ void prokillLoop() {
 
 namespace BleSniffer {
 
+// This module combines BLE and Bluetooth Classic (BR/EDR) discovery. The
+// ESP32-C5 has no BR/EDR radio and no Bluedroid host, so the whole feature is
+// compiled out there and replaced with a stub (see the #else branch below).
+#if BOARD_HAS_BT_CLASSIC
+
 #define SCREEN_WIDTH  240
 #define SCREENHEIGHT 320
 #define STATUS_BAR_Y_OFFSET 20
@@ -3760,10 +3770,10 @@ enum class MessageType {
 };
 
 // Button definitions for PCF8574
-#define BTN_UP     6
-#define BTN_DOWN   3
-#define BTN_LEFT   4
-#define BTN_RIGHT  5
+#define BTN_UP     BOARD_BUTTON_UP
+#define BTN_DOWN   BOARD_BUTTON_DOWN
+#define BTN_LEFT   BOARD_BUTTON_LEFT
+#define BTN_RIGHT  BOARD_BUTTON_RIGHT
 
 struct DeviceInfo {
   String mac;
@@ -4735,5 +4745,31 @@ void blesnifferLoop() {
 void blesnifferCleanup() {
   sniffer.cleanup();
 }
+
+#else  // !BOARD_HAS_BT_CLASSIC (ESP32-C5: BLE-only, no BR/EDR radio)
+
+// The combined BLE + Classic sniffer needs Bluetooth Classic discovery, which
+// the ESP32-C5 hardware cannot do. Present a clear message and steer users to
+// the dedicated BLE Scanner, which works on this board.
+void blesnifferSetup() {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextSize(1);
+  tft.setTextColor(TFT_RED, TFT_BLACK);
+  tft.setCursor(10, 40);
+  tft.print("BT sniffer unavailable");
+  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setCursor(10, 58);
+  tft.print("ESP32-C5 has no BR/EDR radio.");
+  tft.setCursor(10, 80);
+  tft.print("Use the BLE Scanner instead.");
+}
+
+void blesnifferLoop() {
+  delay(50);
+}
+
+void blesnifferCleanup() {}
+
+#endif // BOARD_HAS_BT_CLASSIC
 
 }  // namespace BleSniffer

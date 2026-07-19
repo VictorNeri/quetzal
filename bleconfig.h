@@ -1,6 +1,9 @@
 #ifndef BLECONFIG_H
 #define BLECONFIG_H
 
+#include "board_config.h"
+#include <Arduino.h>
+
 #include "utils.h"
 #include "subconfig.h"  // For cleanupSubGHz() and subghz_receive_active
 
@@ -11,17 +14,10 @@
 void cleanupNRF24();
 
 #include <TFT_eSPI.h> 
-#include <PCF8574.h>
+#include "buttons_compat.h"
 #include <XPT2046_Touchscreen.h>
 
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEServer.h>
-#include <BLEScan.h>
-#include <BLEAdvertisedDevice.h>
-#include "esp_bt.h"
-#include "esp_bt_main.h"
-#include "esp_gap_bt_api.h"
+#include "ble_compat.h"  // Bluedroid on ESP32-DIV V1, NimBLE on NM-CYD-C5
 #include <Arduino.h>
 #include <SPI.h>
 #include <nRF24L01.h>
@@ -30,14 +26,14 @@ void cleanupNRF24();
 #include <Wire.h>
 
 
-#define XPT2046_IRQ   34
-#define XPT2046_MOSI  32
-#define XPT2046_MISO  35
-#define XPT2046_CLK   25
-#define XPT2046_CS    33
+#define XPT2046_IRQ   BOARD_TOUCH_IRQ
+#define XPT2046_MOSI  BOARD_TOUCH_MOSI
+#define XPT2046_MISO  BOARD_TOUCH_MISO
+#define XPT2046_CLK   BOARD_TOUCH_CLK
+#define XPT2046_CS    BOARD_TOUCH_CS
 
 extern TFT_eSPI tft;
-extern PCF8574 pcf;
+extern ButtonExpander pcf;
 
 
 namespace BleJammer {

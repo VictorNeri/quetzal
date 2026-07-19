@@ -1,10 +1,12 @@
 #ifndef SUBCONFIG_H
 #define SUBCONFIG_H
 
+#include "board_config.h"
+
 #include "utils.h"
 #include "arduinoFFT.h"
 #include <TFT_eSPI.h> 
-#include <PCF8574.h>
+#include "buttons_compat.h"
 #include <ELECHOUSE_CC1101_ESP32DIV.h>
 
 #include <RCSwitch.h>
@@ -15,7 +17,7 @@
 #include <Wire.h>
 
 extern TFT_eSPI tft;
-extern PCF8574 pcf;
+extern ButtonExpander pcf;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Radio Switching Support - Pin 16 shared between CC1101 GDO0 and NRF24 CE
@@ -28,11 +30,11 @@ namespace replayat {
 // Cleanup function - call BEFORE switching FROM SubGHz TO 2.4GHz modes
 void cleanupSubGHz();
 
-#define XPT2046_IRQ   34
-#define XPT2046_MOSI  32
-#define XPT2046_MISO  35
-#define XPT2046_CLK   25
-#define XPT2046_CS    33
+#define XPT2046_IRQ   BOARD_TOUCH_IRQ
+#define XPT2046_MOSI  BOARD_TOUCH_MOSI
+#define XPT2046_MISO  BOARD_TOUCH_MISO
+#define XPT2046_CLK   BOARD_TOUCH_CLK
+#define XPT2046_CS    BOARD_TOUCH_CS
 
 
 namespace replayat {

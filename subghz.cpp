@@ -2,7 +2,7 @@
 #include "shared.h"
 #include "icon.h"
 #include "Touchscreen.h"
-#include "driver/rmt.h"  // ESP32 RMT peripheral for hardware-timed OOK transmission
+#include "rmt_compat.h"  // legacy RMT on ESP32-DIV V1, new driver/rmt_tx.h on ESP32-C5
 #include <cstring>       // For memset()
 
 /*
@@ -85,6 +85,7 @@ bool subghz_receive_active = false;  // Flag to track if RCSwitch receive is ena
 // Forward declaration for RMT cleanup
 namespace subbrute {
     extern bool rmtInitialized;
+    void deinitRMT();
 }
 
 // Cleanup function for switching FROM SubGHz TO 2.4GHz modes (global scope to match header declaration)
@@ -96,7 +97,7 @@ void cleanupSubGHz() {
 
     // Clean up RMT driver if it was initialized
     if (subbrute::rmtInitialized) {
-        rmt_driver_uninstall(RMT_CHANNEL_0);
+        subbrute::deinitRMT();
         subbrute::rmtInitialized = false;
         Serial.println("[SubGHz] RMT driver uninstalled");
     }
@@ -104,10 +105,10 @@ void cleanupSubGHz() {
     ELECHOUSE_cc1101.setSidle();  // Put CC1101 in idle mode
     SPI.end();                     // Release SPI bus
     delay(10);
-    pinMode(27, OUTPUT);
-    digitalWrite(27, HIGH);        // Deselect CC1101 CSN
-    pinMode(16, INPUT);            // Release GDO0/RX pin for NRF24 CE
-    pinMode(26, INPUT);            // Release GDO2/TX pin
+    pinMode(BOARD_CC1101_CSN, OUTPUT);
+    digitalWrite(BOARD_CC1101_CSN, HIGH);        // Deselect CC1101 CSN
+    pinMode(BOARD_CC1101_GDO0, INPUT);            // Release GDO0/RX pin for NRF24 CE
+    pinMode(BOARD_CC1101_GDO2, INPUT);            // Release GDO2/TX pin
     Serial.println("[SubGHz] Cleanup complete - radios released for 2.4GHz");
 }
 
@@ -133,13 +134,13 @@ unsigned int colorcursor = 2016;
 
 int rssi;
 
-#define RX_PIN 16         
-#define TX_PIN 26 
+#define RX_PIN BOARD_CC1101_GDO0
+#define TX_PIN BOARD_CC1101_GDO2
 
-#define BTN_LEFT   4
-#define BTN_RIGHT  5
-#define BTN_UP     6
-#define BTN_DOWN   3
+#define BTN_LEFT   BOARD_BUTTON_LEFT
+#define BTN_RIGHT  BOARD_BUTTON_RIGHT
+#define BTN_UP     BOARD_BUTTON_UP
+#define BTN_DOWN   BOARD_BUTTON_DOWN
 
 unsigned long receivedValue = 0; 
 int receivedBitLength = 0;       
@@ -864,11 +865,11 @@ void ReplayAttackSetup() {
   Serial.begin(115200);
 
   // NRF24 cleanup - release pins and SPI bus before CC1101 init
-  pinMode(17, OUTPUT);
-  digitalWrite(17, HIGH);        // Deselect NRF24 CSN
+  pinMode(BOARD_NRF24_CSN_1, OUTPUT);
+  digitalWrite(BOARD_NRF24_CSN_1, HIGH);        // Deselect NRF24 CSN
   SPI.end();                      // Release SPI bus
   delay(10);
-  pinMode(16, INPUT);            // Reconfigure pin 16 for CC1101 GDO0/RX
+  pinMode(BOARD_CC1101_GDO0, INPUT);            // Reconfigure pin for CC1101 GDO0/RX
   Serial.println("[SubGHz] NRF24 cleanup - SPI released for CC1101");
 
   tft.fillScreen(TFT_BLACK);
@@ -1274,17 +1275,17 @@ namespace SavedProfile {
 
 static bool uiDrawn = false;
 
-#define RX_PIN 16         
-#define TX_PIN 26        
+#define RX_PIN BOARD_CC1101_GDO0
+#define TX_PIN BOARD_CC1101_GDO2
 
 #define EEPROM_SIZE 1440  // Increased to accommodate larger profiles
 #define ADDR_PROFILE_START 1300
 #define MAX_NAME_LENGTH 16 // Maximum length for profile name (including null terminator)
 
-#define BTN_UP     6
-#define BTN_DOWN   3
-#define BTN_LEFT   4
-#define BTN_RIGHT  5
+#define BTN_UP     BOARD_BUTTON_UP
+#define BTN_DOWN   BOARD_BUTTON_DOWN
+#define BTN_LEFT   BOARD_BUTTON_LEFT
+#define BTN_RIGHT  BOARD_BUTTON_RIGHT
 
 #define SCREEN_WIDTH 240 
 #define SCREEN_HEIGHT 320 
@@ -1580,11 +1581,11 @@ void saveSetup() {
     Serial.begin(115200);
 
     // NRF24 cleanup - release pins and SPI bus before CC1101 init
-    pinMode(17, OUTPUT);
-    digitalWrite(17, HIGH);        // Deselect NRF24 CSN
+    pinMode(BOARD_NRF24_CSN_1, OUTPUT);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);        // Deselect NRF24 CSN
     SPI.end();                      // Release SPI bus
     delay(10);
-    pinMode(16, INPUT);            // Reconfigure pin 16 for CC1101 GDO0/RX
+    pinMode(BOARD_CC1101_GDO0, INPUT);            // Reconfigure pin for CC1101 GDO0/RX
     Serial.println("[SubGHz] NRF24 cleanup - SPI released for CC1101");
 
     EEPROM.begin(EEPROM_SIZE);
@@ -1680,16 +1681,15 @@ static bool uiDrawn = false;
 
 static unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 200;
-
-#define TX_PIN 26
-
+#define RX_PIN BOARD_CC1101_GDO0
+#define TX_PIN BOARD_CC1101_GDO2
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 320
 
-#define BTN_LEFT   4
-#define BTN_RIGHT  5
-#define BTN_DOWN   3
-#define BTN_UP     6
+#define BTN_LEFT   BOARD_BUTTON_LEFT
+#define BTN_RIGHT  BOARD_BUTTON_RIGHT
+#define BTN_DOWN   BOARD_BUTTON_DOWN
+#define BTN_UP     BOARD_BUTTON_UP
 
 // RMT noise jamming parameters
 #define RMT_NOISE_BATCH    64       // Symbols per RMT transmission
@@ -1993,11 +1993,11 @@ void subjammerSetup() {
     Serial.flush();
 
     // NRF24 cleanup - release pins and SPI bus before CC1101 init
-    pinMode(17, OUTPUT);
-    digitalWrite(17, HIGH);        // Deselect NRF24 CSN
+    pinMode(BOARD_NRF24_CSN_1, OUTPUT);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);        // Deselect NRF24 CSN
     SPI.end();                      // Release SPI bus
     delay(10);
-    pinMode(16, INPUT);            // Reconfigure pin 16 for CC1101 GDO0/RX
+    pinMode(BOARD_CC1101_GDO0, INPUT);            // Reconfigure pin for CC1101 GDO0/RX
     Serial.println("[SubGHz] NRF24 cleanup - SPI released for CC1101");
 
     // Initialize RMT for hardware-timed noise jamming (shared with subbrute)
@@ -2115,7 +2115,7 @@ void subjammerLoop() {
             // CC1101 generates constant carrier at target frequency
             ELECHOUSE_cc1101.SpiWriteReg(CC1101_TXFIFO, 0xFF);
             ELECHOUSE_cc1101.SpiStrobe(CC1101_STX);
-            digitalWrite(TX_PIN, HIGH);
+            digitalWrite(BOARD_CC1101_CSN, HIGH);
         } else {
             // ============================================================
             // RMT-BASED NOISE JAMMING - Hardware-timed random pulses
@@ -2153,16 +2153,15 @@ void subjammerLoop() {
 namespace subbrute {
 
 static bool uiDrawn = false;
-
-#define TX_PIN 26
-
+#define RX_PIN BOARD_CC1101_GDO0
+#define TX_PIN BOARD_CC1101_GDO2
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 320
 
-#define BTN_LEFT   4
-#define BTN_RIGHT  5
-#define BTN_DOWN   3
-#define BTN_UP     6
+#define BTN_LEFT   BOARD_BUTTON_LEFT
+#define BTN_RIGHT  BOARD_BUTTON_RIGHT
+#define BTN_DOWN   BOARD_BUTTON_DOWN
+#define BTN_UP     BOARD_BUTTON_UP
 
 // Forward declarations
 void updateBruteDisplay();
@@ -2249,6 +2248,79 @@ RCSwitch bruteSwitch = RCSwitch();
 static rmt_item32_t rmtSymbols[RMT_MAX_SYMBOLS];
 bool rmtInitialized = false;  // Not static - shared with subjammer namespace
 
+#if RMT_COMPAT_NEW_DRIVER
+
+// ── ESP32-C5 / ESP-IDF 5: new driver/rmt_tx.h implementation ────────────────
+// 1 MHz resolution => 1 tick == 1 us, matching the legacy CLK_DIV=80 timing, so
+// every symbol duration in this file keeps meaning microseconds.
+static rmt_channel_handle_t rmtChannel = NULL;
+static rmt_encoder_handle_t rmtEncoder = NULL;
+
+bool initRMT() {
+    if (rmtInitialized) return true;
+
+    rmt_tx_channel_config_t txCfg = {};
+    txCfg.gpio_num = (gpio_num_t)TX_PIN;
+    txCfg.clk_src = RMT_CLK_SRC_DEFAULT;
+    txCfg.resolution_hz = 1000000;      // 1 MHz -> 1 us per tick
+    txCfg.mem_block_symbols = 64;
+    txCfg.trans_queue_depth = 4;
+
+    if (rmt_new_tx_channel(&txCfg, &rmtChannel) != ESP_OK) {
+        Serial.println("[RMT-INIT] rmt_new_tx_channel FAILED");
+        rmtChannel = NULL;
+        return false;
+    }
+
+    rmt_copy_encoder_config_t encCfg = {};
+    if (rmt_new_copy_encoder(&encCfg, &rmtEncoder) != ESP_OK) {
+        Serial.println("[RMT-INIT] rmt_new_copy_encoder FAILED");
+        rmt_del_channel(rmtChannel);
+        rmtChannel = NULL;
+        return false;
+    }
+
+    if (rmt_enable(rmtChannel) != ESP_OK) {
+        Serial.println("[RMT-INIT] rmt_enable FAILED");
+        rmt_del_encoder(rmtEncoder);
+        rmt_del_channel(rmtChannel);
+        rmtEncoder = NULL;
+        rmtChannel = NULL;
+        return false;
+    }
+
+    rmtInitialized = true;
+    Serial.println("[RMT-INIT] SUCCESS (new RMT driver) - 1us resolution");
+    return true;
+}
+
+void deinitRMT() {
+    if (rmtChannel) {
+        rmt_disable(rmtChannel);
+        rmt_del_channel(rmtChannel);
+        rmtChannel = NULL;
+    }
+    if (rmtEncoder) {
+        rmt_del_encoder(rmtEncoder);
+        rmtEncoder = NULL;
+    }
+    rmtInitialized = false;
+}
+
+// Transmit RMT symbols (hardware-timed, blocking)
+void rmtTransmit(rmt_item32_t* items, size_t numItems) {
+    if (!rmtInitialized) return;
+
+    rmt_transmit_config_t txConf = {};
+    txConf.loop_count = 0;  // single shot
+    // The copy encoder takes raw rmt_symbol_word_t payload (size in bytes).
+    rmt_transmit(rmtChannel, rmtEncoder, items, numItems * sizeof(rmt_item32_t), &txConf);
+    rmt_tx_wait_all_done(rmtChannel, -1);  // block until complete (legacy was blocking)
+}
+
+#else
+
+// ── Original ESP32-DIV V1 / ESP-IDF 4: legacy driver/rmt.h implementation ────
 // Initialize RMT for OOK transmission
 bool initRMT() {
     Serial.println("[RMT-INIT] initRMT() called");
@@ -2310,6 +2382,11 @@ bool initRMT() {
     return true;
 }
 
+void deinitRMT() {
+    rmt_driver_uninstall(RMT_TX_CHANNEL);
+    rmtInitialized = false;
+}
+
 // Transmit RMT symbols (hardware-timed, blocking)
 static uint32_t rmtTxCount = 0;
 void rmtTransmit(rmt_item32_t* items, size_t numItems) {
@@ -2334,6 +2411,8 @@ void rmtTransmit(rmt_item32_t* items, size_t numItems) {
         Serial.flush();
     }
 }
+
+#endif // RMT_COMPAT_NEW_DRIVER
 
 // Encode a single OOK bit into RMT symbol
 // Each symbol = one complete bit (HIGH pulse + LOW pulse)
@@ -2442,13 +2521,13 @@ int nextDeBruijnBit() {
 void transmitBit(bool bit, const ProtocolDef& proto) {
     if (bit) {
         // '1' bit: long HIGH, short LOW (or inverse for some protocols)
-        digitalWrite(TX_PIN, HIGH);
+        digitalWrite(BOARD_CC1101_CSN, HIGH);
         delayMicroseconds(proto.longPulse);
         digitalWrite(TX_PIN, LOW);
         delayMicroseconds(proto.shortPulse);
     } else {
         // '0' bit: short HIGH, long LOW
-        digitalWrite(TX_PIN, HIGH);
+        digitalWrite(BOARD_CC1101_CSN, HIGH);
         delayMicroseconds(proto.shortPulse);
         digitalWrite(TX_PIN, LOW);
         delayMicroseconds(proto.longPulse);
@@ -2457,7 +2536,7 @@ void transmitBit(bool bit, const ProtocolDef& proto) {
 
 // Transmit pilot/sync pulse (uses safe delay for long pulses)
 void transmitPilot(const ProtocolDef& proto) {
-    digitalWrite(TX_PIN, HIGH);
+    digitalWrite(BOARD_CC1101_CSN, HIGH);
     safeDelayMicroseconds(proto.pilotHigh);
     digitalWrite(TX_PIN, LOW);
     safeDelayMicroseconds(proto.pilotLow);  // FIX BUG 2: pilotLow can be >16383us
@@ -3175,11 +3254,11 @@ void subBruteSetup() {
     Serial.begin(115200);
 
     // NRF24 cleanup - release pins and SPI bus before CC1101 init
-    pinMode(17, OUTPUT);
-    digitalWrite(17, HIGH);        // Deselect NRF24 CSN
+    pinMode(BOARD_NRF24_CSN_1, OUTPUT);
+    digitalWrite(BOARD_NRF24_CSN_1, HIGH);        // Deselect NRF24 CSN
     SPI.end();                      // Release SPI bus
     delay(10);
-    pinMode(16, INPUT);            // Reconfigure pin 16 for CC1101 GDO0/RX
+    pinMode(BOARD_CC1101_GDO0, INPUT);            // Reconfigure pin for CC1101 GDO0/RX
     Serial.println("[SubGHz] NRF24 cleanup - SPI released for CC1101");
 
     // FIX BUG 5: Clean up any leftover De Bruijn state from previous run
