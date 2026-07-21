@@ -1,13 +1,15 @@
 #include "utils.h"
 #include "shared.h"
 #include "icon.h"
+#include "quetzal_logo.h"
 #include "Touchscreen.h"
+#include "ble_hid_inject.h"  // BleHidInject::isConnected() for the connectivity popup
 #include <WiFi.h>  // For WiFi.RSSI() and WiFi.status()
 #include "esp_idf_version.h"  // ESP_IDF_VERSION_MAJOR for API-compat guards
 
 // Vertical-scroll command opcodes. TFT_eSPI only defines the ILI9341_* names when
-// the ILI9341 driver is selected (original board). The NM-CYD-C5 uses the ST7789
-// driver, which shares the same standard MIPI DCS opcodes, so provide fallbacks.
+// the ILI9341 driver is selected; the NM-CYD-C5 uses the ST7789 driver, which
+// shares the same standard MIPI DCS opcodes, so provide fallbacks.
 #ifndef ILI9341_VSCRDEF
 #define ILI9341_VSCRDEF  0x33  // Vertical Scrolling Definition
 #endif
@@ -17,33 +19,33 @@
 
 
 /*
- * 
+ *
  * Notification
- * 
+ *
  */
 
 
 /*
     showNotification("New Message!", "Task Failed Successfully.");
-    
+
     if (notificationVisible && ts.touched()) {
       int x, y, z;
         TS_Point p = ts.getPoint();
         x = ::map(p.x, TS_MINX, TS_MAXX, 0, DISPLAY_WIDTH - 1);
         y = ::map(p.y, TS_MAXY, TS_MINY, 0, DISPLAY_HEIGHT - 1);
-        
+
     if (x >= closeButtonX && x <= (closeButtonX + closeButtonSize) &&
         y >= closeButtonY && y <= (closeButtonY + closeButtonSize)) {
         hideNotification();
     }
-    
+
     if (x >= okButtonX && x <= (okButtonX + okButtonWidth) &&
         y >= okButtonY && y <= (okButtonY + okButtonHeight)) {
         hideNotification();
     }
      delay(100);
   }
-  
+
 */
 
 bool notificationVisible = true;
@@ -60,7 +62,7 @@ void showNotification(const char* title, const char* message) {
 
     tft.fillRect(notifX, notifY, notifWidth, notifHeight, LIGHT_GRAY);
     tft.fillRect(notifX, notifY, notifWidth, 20, BLUE);
-    
+
     tft.setTextColor(WHITE);
     tft.setTextSize(1);
     tft.setCursor(notifX + 5, notifY + 5);
@@ -103,12 +105,12 @@ void hideNotification() {
 }
 
 void printWrappedText(int x, int y, int maxWidth, const char* text) {
-    String message = text;  
+    String message = text;
     int cursorX = x, cursorY = y;
-    
+
     while (message.length() > 0) {
         int lineEnd = message.length();
-        
+
         while (tft.textWidth(message.substring(0, lineEnd)) > maxWidth) {
             lineEnd--;
         }
@@ -130,9 +132,9 @@ void printWrappedText(int x, int y, int maxWidth, const char* text) {
 
 
 /*
- * 
+ *
  * StatusBar
- * 
+ *
  */
 
 #if ESP_IDF_VERSION_MAJOR < 5
@@ -149,7 +151,7 @@ uint8_t temprature_sens_read();
 #endif
 
 unsigned long lastStatusBarUpdate = 0;
-const int STATUS_BAR_UPDATE_INTERVAL = 1000; 
+const int STATUS_BAR_UPDATE_INTERVAL = 1000;
 float lastBatteryVoltage = 0.0;
 
 float readBatteryVoltage() {
@@ -211,6 +213,7 @@ bool isSDCardAvailable() {
 void drawStatusBar(float batteryVoltage, bool forceUpdate) {
   static int lastBatteryPercentage = -1;
   static int lastWiFiStrength = -1;
+  static bool lastBleConnected = false;
   static String lastDisplayedTime = "";
 
   // IGNORE the passed voltage - read FRESH every time!
@@ -237,27 +240,29 @@ void drawStatusBar(float batteryVoltage, bool forceUpdate) {
   float internalTemp = readInternalTemperature();
   bool sdAvailable = false;
   //bool sdAvailable = isSDCardAvailable();
+  bool bleConnected = BleHidInject::isConnected();
 
-  if (batteryPercentage != lastBatteryPercentage || wifiStrength != lastWiFiStrength || forceUpdate) {
+  if (batteryPercentage != lastBatteryPercentage || wifiStrength != lastWiFiStrength ||
+      bleConnected != lastBleConnected || forceUpdate) {
     int barHeight = 20;  // Status bar height
     int x = 7;           // Padding for battery icon
     int y = 4;           // Vertical offset
 
     // **Dark Background with Neon Green Edge**
     tft.fillRect(0, 0, tft.width(), barHeight, DARK_GRAY);
-    //tft.fillRect(0, barHeight - 2, tft.width(), 3, ORANGE); 
+    //tft.fillRect(0, barHeight - 2, tft.width(), 3, ORANGE);
 
     // **Draw Battery Icon (Hacker/Techy Look)**
-    tft.drawRoundRect(x, y, 22, 10, 2, SHREDDY_TEAL);        // Battery border
-    tft.fillRect(x + 22, y + 3, 2, 4, SHREDDY_TEAL);         // Battery terminal
-    
+    tft.drawRoundRect(x, y, 22, 10, 2, UI_CYAN);        // Battery border
+    tft.fillRect(x + 22, y + 3, 2, 4, UI_CYAN);         // Battery terminal
+
     int batteryLevelWidth = map(batteryPercentage, 0, 100, 0, 20);
     uint16_t batteryColor = (batteryPercentage > 20) ? GREEN : RED;
     tft.fillRoundRect(x + 2, y + 2, batteryLevelWidth, 6, 1, batteryColor);
 
     // **Display Battery Percentage**
     tft.setCursor(x + 30, y + 2);
-    tft.setTextColor(GREEN, DARK_GRAY);  
+    tft.setTextColor(GREEN, DARK_GRAY);
     tft.setTextFont(1);
     tft.setTextSize(1);
     tft.print(String(batteryPercentage) + "%");
@@ -272,9 +277,12 @@ void drawStatusBar(float batteryVoltage, bool forceUpdate) {
       if (wifiStrength > i * 25) {
         tft.fillRoundRect(barX, wifiY - barHeight, barWidth, barHeight, 1, GREEN);
       } else {
-        tft.drawRoundRect(barX, wifiY - barHeight, barWidth, barHeight, 1, SHREDDY_TEAL);
+        tft.drawRoundRect(barX, wifiY - barHeight, barWidth, barHeight, 1, UI_CYAN);
       }
     }
+
+    // Bluetooth connection indicator (BLE Remote pairing state)
+    tft.drawBitmap(145, y - 3, bitmap_icon_ble, 16, 16, bleConnected ? UI_GREEN : UI_GUNMETAL);
 
     // Temperature indicator
     if (internalTemp >= 55) {
@@ -282,7 +290,7 @@ void drawStatusBar(float batteryVoltage, bool forceUpdate) {
     } else if (internalTemp >= 50) {
       tft.drawBitmap(203, y - 3, bitmap_icon_temp, 16, 16, ORANGE);        // WARM - caution
     } else {
-      tft.drawBitmap(203, y - 3, bitmap_icon_temp, 16, 16, HALEHOUND_CYAN);  // COOL - normal
+      tft.drawBitmap(203, y - 3, bitmap_icon_temp, 16, 16, UI_CYAN);  // COOL - normal
     }
 
     // **Display SD Card Icon (If Available)**
@@ -293,15 +301,105 @@ void drawStatusBar(float batteryVoltage, bool forceUpdate) {
     }
 
     // **Bottom Line for Aesthetic (Neon Green)**
-    //tft.drawLine(0, barHeight - 1, tft.width(), barHeight - 1, ORANGE);  
+    //tft.drawLine(0, barHeight - 1, tft.width(), barHeight - 1, ORANGE);
 
     // **Update Last Values**
     lastBatteryPercentage = batteryPercentage;
     lastWiFiStrength = wifiStrength;
+    lastBleConnected = bleConnected;
+  }
+}
+
+// Tapping the always-visible status bar (y = 0..20) opens a popup with live
+// WiFi/Bluetooth/temperature detail. updateStatusBar() is called from nearly
+// every feature's loop across the firmware, which makes it the one place a
+// global tap check reaches almost every screen - unlike handleButtons(),
+// which only runs for the main menu/submenu grid.
+void checkStatusBarTap() {
+  static unsigned long lastCheck = 0;
+  if (millis() - lastCheck < 50) return;
+  lastCheck = millis();
+
+  if (!ts.touched()) return;
+  TS_Point p = ts.getPoint();
+  int x = ::map(p.x, TS_MINX, TS_MAXX, 0, 239);
+  int y = ::map(p.y, TS_MAXY, TS_MINY, 0, 319);
+
+  if (y < 0 || y >= 20) return;
+
+  delay(150);  // debounce so the same physical tap isn't immediately re-read as the dismiss tap
+  showConnectivityPopup();
+}
+
+void showConnectivityPopup() {
+  int boxW = 200, boxH = 100;
+  int boxX = (240 - boxW) / 2;
+  int boxY = (320 - boxH) / 2;
+  int closeSize = 15;
+  int closeX = boxX + boxW - closeSize - 5;
+  int closeY = boxY + 2;
+
+  // Snapshot whatever's currently on screen under the popup so closing it can
+  // restore the real content instead of leaving a black hole behind - the
+  // caller's own screen may not redraw that region on its own for a while.
+  uint16_t* background = (uint16_t*)malloc((size_t)boxW * boxH * sizeof(uint16_t));
+  if (background) tft.readRect(boxX, boxY, boxW, boxH, background);
+
+  tft.fillRect(boxX, boxY, boxW, boxH, UI_DARK);
+  tft.drawRect(boxX, boxY, boxW, boxH, UI_AMBER);
+  tft.fillRect(boxX, boxY, boxW, 18, UI_GUNMETAL);
+  tft.setTextFont(1);
+  tft.setTextColor(UI_AMBER, UI_GUNMETAL);
+  tft.setCursor(boxX + 6, boxY + 5);
+  tft.print("Status");
+
+  tft.fillRect(closeX, closeY, closeSize, closeSize, RED);
+  tft.setTextColor(WHITE, RED);
+  tft.setCursor(closeX + 4, closeY + 3);
+  tft.print("X");
+
+  tft.setTextColor(UI_CYAN, UI_DARK);
+  tft.setCursor(boxX + 8, boxY + 28);
+  if (WiFi.status() == WL_CONNECTED) {
+    tft.print("WiFi: " + WiFi.SSID());
+    tft.setCursor(boxX + 8, boxY + 40);
+    tft.print("  " + WiFi.localIP().toString());
+  } else {
+    tft.print("WiFi: Not connected");
+  }
+
+  tft.setCursor(boxX + 8, boxY + 56);
+  tft.print(String("Bluetooth: ") + (BleHidInject::isConnected() ? "Connected (Remote)" : "Not connected"));
+
+  tft.setCursor(boxX + 8, boxY + 72);
+  tft.printf("Temp: %.1f C", readInternalTemperature());
+
+  while (true) {
+    if (ts.touched()) {
+      TS_Point p = ts.getPoint();
+      int x = ::map(p.x, TS_MINX, TS_MAXX, 0, 239);
+      int y = ::map(p.y, TS_MAXY, TS_MINY, 0, 319);
+      if (x >= closeX && x <= closeX + closeSize && y >= closeY && y <= closeY + closeSize) {
+        if (background) {
+          tft.pushImage(boxX, boxY, boxW, boxH, background);
+          free(background);
+        } else {
+          // readback unavailable/allocation failed - best effort, matches
+          // the plain black-fill behavior showNotification()/hideNotification()
+          // already use elsewhere in this codebase.
+          tft.fillRect(boxX, boxY, boxW, boxH, TFT_BLACK);
+        }
+        delay(150);
+        return;
+      }
+    }
+    delay(10);
   }
 }
 
 void updateStatusBar() {
+  checkStatusBarTap();
+
   unsigned long currentMillis = millis();
 
   if (currentMillis - lastStatusBarUpdate > STATUS_BAR_UPDATE_INTERVAL) {
@@ -318,66 +416,36 @@ void updateStatusBar() {
 
 
 /*
- * 
+ *
  * Loading
- * 
+ *
  */
 
+// Text-only loading indicator: "Loading" with a cycling number of dots.
+// A proper animated asset is still TBD; the (x, y) params are kept for call
+// compatibility but only used when center is false.
 void loading(int frameDelay, uint16_t color, int16_t x, int16_t y, int repeats, bool center) {
-  int16_t bitmapWidth = 100;
-  int16_t bitmapHeight = 120;
-  int16_t logoX = x;
-  int16_t logoY = y;
   int16_t screenWidth = tft.width();
   int16_t screenHeight = tft.height();
 
-  if (center) {
-    logoX = (screenWidth - bitmapWidth) / 2;
-    logoY = (screenHeight - bitmapHeight) / 2 - 25;  // Move up for text
-  }
+  tft.setTextFont(4);
+  tft.setTextSize(1);
 
-  // Array of bitmaps
-  const unsigned char* bitmaps[] = {
-    bitmap_icon_skull_loading_1,
-    bitmap_icon_skull_loading_2,
-    bitmap_icon_skull_loading_3,
-    bitmap_icon_skull_loading_4,
-    bitmap_icon_skull_loading_5,
-    bitmap_icon_skull_loading_6,
-    bitmap_icon_skull_loading_7,
-    bitmap_icon_skull_loading_8,
-    bitmap_icon_skull_loading_9,
-    bitmap_icon_skull_loading_10
-  };
-  const int numFrames = 10;
-
-  // HaleHound colors - alternating magenta and cyan
-  uint16_t colors[] = {HALEHOUND_MAGENTA, HALEHOUND_CYAN};
+  const int maxDots = 3;
+  const char* base = "Loading";
+  int16_t maxWidth = tft.textWidth(String(base) + "...");
+  int16_t textY = center ? (screenHeight / 2) : y;
 
   for (int r = 0; r < repeats; r++) {
-    for (int i = 0; i < numFrames; i++) {
-      uint16_t frameColor = colors[i % 2];  // Alternate colors
+    for (int dots = 0; dots <= maxDots; dots++) {
+      String text = base;
+      for (int d = 0; d < dots; d++) text += ".";
 
-      // Clear skull area
-      tft.fillRect(logoX, logoY, bitmapWidth, bitmapHeight + 40, TFT_BLACK);
-
-      // Draw skull frame
-      tft.drawBitmap(logoX, logoY, bitmaps[i], bitmapWidth, bitmapHeight, frameColor);
-
-      // Draw HALEHOUND text below skull
-      if (center) {
-        tft.setTextFont(4);
-        tft.setTextSize(1);
-        tft.setTextColor(frameColor, TFT_BLACK);
-
-        const char* text = "HALEHOUND";
-        int16_t textW = tft.textWidth(text);
-        int16_t textX = (screenWidth - textW) / 2;
-        int16_t textY = logoY + bitmapHeight + 10;
-
-        tft.setCursor(textX, textY);
-        tft.print(text);
-      }
+      int16_t textX = center ? (screenWidth - maxWidth) / 2 : x;
+      tft.fillRect(textX, textY, maxWidth, 20, TFT_BLACK);
+      tft.setTextColor(color, TFT_BLACK);
+      tft.setCursor(textX, textY);
+      tft.print(text);
 
       delay(frameDelay);
     }
@@ -386,51 +454,27 @@ void loading(int frameDelay, uint16_t color, int16_t x, int16_t y, int repeats, 
 
 
 /*
- * 
+ *
  * Display Logo
- * 
+ *
  */
 
 void displayLogo(uint16_t color, int displayTime) {
-  int16_t screenWidth = tft.width();
-  int16_t screenHeight = tft.height();
+  (void)color;  // the splash image carries its own colors now
 
-  // Clear screen with black
-  tft.fillScreen(TFT_BLACK);
-
-  // Draw full-screen skull stack in muted gray
-  tft.drawBitmap(0, 0, bitmap_halehound_splash, HALEHOUND_SPLASH_WIDTH, HALEHOUND_SPLASH_HEIGHT, GRAY);
-
-  // Draw branding text in HaleHound magenta
-  tft.setTextColor(HALEHOUND_MAGENTA);
-
-  // ESP32-DIV title - larger
-  tft.setTextFont(4);  // Font 4 = 26px, clean and sharp
-  tft.setTextSize(1);
-  String title = "ESP32-DIV";
-  int16_t titleWidth = tft.textWidth(title);
-  tft.setCursor((screenWidth - titleWidth) / 2, 255);
-  tft.print(title);
-
-  // Version line
-  tft.setTextFont(2);  // Font 2 = 16px
-  String version = "v2.5.0 - HaleHound Edition";
-  int16_t versionWidth = tft.textWidth(version);
-  tft.setCursor((screenWidth - versionWidth) / 2, 285);
-  tft.print(version);
-
-  // Credit line
-  tft.setTextFont(2);
-  String credit = "By: JMFH";
-  int16_t creditWidth = tft.textWidth(credit);
-  tft.setCursor((screenWidth - creditWidth) / 2, 303);
-  tft.print(credit);
+  // Full-screen pixel-art quetzal splash (includes its own "BOOTING..."
+  // text), scaled to exactly fill the display - see quetzal_logo.h.
+  // pushImage() expects byte-swapped RGB565 by default; the array here was
+  // generated in plain (non-swapped) order, so without this the panel
+  // renders it with R/B channels scrambled (green art coming out blue-ish).
+  tft.setSwapBytes(true);
+  tft.pushImage(0, 0, QUETZAL_LOGO_WIDTH, QUETZAL_LOGO_HEIGHT, bitmap_quetzal_logo);
+  tft.setSwapBytes(false);
 
   Serial.println("==========================================");
-  Serial.println("ESP32-DIV v2.5.0 - HaleHound Edition      ");
-  Serial.println("Developed by: HaleHound (JMFH)            ");
-  Serial.println("Original by:  CiferTech                   ");
-  Serial.println("GitHub:       github.com/JesseCHale       ");
+  Serial.println("QUETZAL - Pentesting Tools");
+  Serial.println(BOARD_NAME);
+  Serial.println("Quetzal - see README for history and attribution");
   Serial.println("==========================================");
 
   delay(displayTime);
@@ -438,9 +482,9 @@ void displayLogo(uint16_t color, int displayTime) {
 
 
 /*
- * 
+ *
  * Terminal
- * 
+ *
  */
 
 namespace Terminal {
@@ -477,37 +521,37 @@ void runUI() {
     #define STATUS_BAR_Y_OFFSET 20
     #define STATUS_BAR_HEIGHT 16
     #define ICON_SIZE 16
-    #define ICON_NUM 3 
-    
-    static int iconX[ICON_NUM] = {210, 170, 10}; 
+    #define ICON_NUM 3
+
+    static int iconX[ICON_NUM] = {210, 170, 10};
     static int iconY = STATUS_BAR_Y_OFFSET;
-    
+
     static const unsigned char* icons[ICON_NUM] = {
-        bitmap_icon_sort_up_plus,    
-        bitmap_icon_power,      
-        bitmap_icon_go_back 
+        bitmap_icon_sort_up_plus,
+        bitmap_icon_power,
+        bitmap_icon_go_back
     };
 
     if (!uiDrawn) {
-        tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+        tft.drawLine(0, 19, 240, 19, UI_CYAN);
         tft.fillRect(0, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH, STATUS_BAR_HEIGHT, DARK_GRAY);
-        
+
         for (int i = 0; i < ICON_NUM; i++) {
-            if (icons[i] != NULL) {  
-                tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
-            } 
+            if (icons[i] != NULL) {
+                tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
+            }
         }
         tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
-        uiDrawn = true;               
+        uiDrawn = true;
     }
 
     static unsigned long lastAnimationTime = 0;
-    static int animationState = 0;  
+    static int animationState = 0;
     static int activeIcon = -1;
 
     if (animationState > 0 && millis() - lastAnimationTime >= 150) {
         if (animationState == 1) {
-            tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+            tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, UI_CYAN);
             animationState = 2;
 
             switch (activeIcon) {
@@ -520,21 +564,21 @@ void runUI() {
                     delay(100);
                     Serial.begin(baudRates[baudIndex]);
                     tft.fillRect(0, 37, DISPLAY_WIDTH, 16, ORANGE);
-                    tft.setTextColor(SHREDDY_TEAL, SHREDDY_TEAL);
+                    tft.setTextColor(UI_CYAN, UI_CYAN);
                     String baudMsg = " Serial Terminal - " + String(baudRates[baudIndex]) + " baud ";
                     tft.drawCentreString(baudMsg, DISPLAY_WIDTH / 2, 37, 2);
                     delay(10);
                   }
                     break;
-                case 1: 
+                case 1:
                     delay(10);
                     tft.fillRect(0, 37, DISPLAY_WIDTH, 16, ORANGE);
-                    tft.setTextColor(SHREDDY_TEAL, SHREDDY_TEAL);
+                    tft.setTextColor(UI_CYAN, UI_CYAN);
                     tft.drawCentreString(" Serial Terminal Active ", DISPLAY_WIDTH / 2, 37, 2);
                     terminalActive = true;
                     break;
-  
-                case 2: 
+
+                case 2:
                     feature_exit_requested = true;
                     break;
             }
@@ -542,14 +586,14 @@ void runUI() {
             animationState = 0;
             activeIcon = -1;
         }
-        lastAnimationTime = millis();  
+        lastAnimationTime = millis();
     }
 
     static unsigned long lastTouchCheck = 0;
-    const unsigned long touchCheckInterval = 50; 
+    const unsigned long touchCheckInterval = 50;
 
     if (millis() - lastTouchCheck >= touchCheckInterval) {
-        if (ts.touched() && feature_active) { 
+        if (ts.touched() && feature_active) {
             TS_Point p = ts.getPoint();
             int x = ::map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
             int y = ::map(p.y, TS_MAXY, TS_MINY, 0, SCREENHEIGHT - 1);
@@ -602,13 +646,13 @@ void setupScrollArea(uint16_t tfa, uint16_t bfa) {
 void terminalSetup() {
 
   setupTouchscreen();
-  tft.fillScreen(TFT_BLACK); 
+  tft.fillScreen(TFT_BLACK);
 
   tft.fillRect(0, 37, DISPLAY_WIDTH, 16, ORANGE);
-  tft.setTextColor(SHREDDY_TEAL, SHREDDY_TEAL);
+  tft.setTextColor(UI_CYAN, UI_CYAN);
   String baudMsg = " Serial Terminal - " + String(baudRates[baudIndex]) + " baud ";
   tft.drawCentreString(baudMsg, DISPLAY_WIDTH / 2, 37, 2);
-  
+
   float currentBatteryVoltage = readBatteryVoltage();
   drawStatusBar(currentBatteryVoltage, false);
 
@@ -623,7 +667,7 @@ void terminalSetup() {
 }
 
 void terminalLoop() {
-  
+
   runUI();
 
   if (terminalActive) {

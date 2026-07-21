@@ -2,14 +2,15 @@
 #include "shared.h"
 #include "icon.h"
 #include "Touchscreen.h"
-#include "rmt_compat.h"  // legacy RMT on ESP32-DIV V1, new driver/rmt_tx.h on ESP32-C5
+#include "rmt_compat.h"  // legacy driver/rmt.h on IDF<5, new driver/rmt_tx.h on IDF>=5 (ESP32-C5)
 #include <cstring>       // For memset()
+#include "hw_detect.h"
 
 /*
  * ReplayAttack
- * 
- * 
- * 
+ *
+ *
+ *
  */
 
 namespace replayat {
@@ -18,14 +19,14 @@ namespace replayat {
 volatile unsigned long gdo0_interrupt_count = 0;
 volatile unsigned long gdo0_last_state = 0;
 void IRAM_ATTR gdo0DebugISR() {
-    gdo0_interrupt_count++;
+    gdo0_interrupt_count = gdo0_interrupt_count + 1;
 }
 
 #define EEPROM_SIZE 1440
 #define ADDR_VALUE 1280    // 4 bytes
 #define ADDR_BITLEN 1284   // 2 bytes
 #define ADDR_PROTO 1286    // 2 bytes
-#define ADDR_FREQ 1288     // 4 bytes 
+#define ADDR_FREQ 1288     // 4 bytes
 
 #define SCREEN_WIDTH  240
 #define SCREENHEIGHT 320
@@ -73,7 +74,7 @@ struct Profile {
 #define PROFILE_SIZE sizeof(Profile) // Size of the updated Profile struct
 #define ADDR_PROFILE_START 1300
 #define MAX_PROFILES 4  // Fixed: EEPROM only has 140 bytes, each profile is 32 bytes
-#define ADDR_PROFILE_COUNT 0 
+#define ADDR_PROFILE_COUNT 0
 
 int profileCount = 0;
 
@@ -116,7 +117,7 @@ namespace replayat {  // Reopen replayat namespace
 
 arduinoFFT FFTSUB = arduinoFFT();
 
-const uint16_t samplesSUB = 256; 
+const uint16_t samplesSUB = 256;
 const double FrequencySUB = 5000;
 
 double attenuation_num = 10;
@@ -142,14 +143,14 @@ int rssi;
 #define BTN_UP     BOARD_BUTTON_UP
 #define BTN_DOWN   BOARD_BUTTON_DOWN
 
-unsigned long receivedValue = 0; 
-int receivedBitLength = 0;       
-int receivedProtocol = 0;       
-const int rssi_threshold = -75; 
+unsigned long receivedValue = 0;
+int receivedBitLength = 0;
+int receivedProtocol = 0;
+const int rssi_threshold = -75;
 
 static const uint32_t subghz_frequency_list[] = {
-    300000000, 303875000, 304250000, 310000000, 315000000, 318000000,  
-    390000000, 418000000, 433075000, 433420000, 433920000, 434420000, 
+    300000000, 303875000, 304250000, 310000000, 315000000, 318000000,
+    390000000, 418000000, 433075000, 433420000, 433920000, 434420000,
     434775000, 438900000, 868350000, 915000000, 925000000
 };
 
@@ -318,7 +319,7 @@ bool rmtReplaySend(int protocol, unsigned long value, int bitLength, int repetit
 void updateDisplay() {
     uiDrawn = false;
 
-    tft.fillRect(0, 40, 240, 40, TFT_BLACK);  
+    tft.fillRect(0, 40, 240, 40, TFT_BLACK);
     tft.drawLine(0, 80, 240, 80, TFT_WHITE);
 
     // Frequency - show AUTO-SCAN when enabled
@@ -342,7 +343,7 @@ void updateDisplay() {
         tft.print(subghz_frequency_list[currentFrequencyIndex] / 1000000.0, 2);
         tft.print(" MHz");
     }
-    
+
     // Bit Length
     tft.setCursor(5, 35 + yshift);
     tft.setTextColor(TFT_CYAN);
@@ -357,7 +358,7 @@ void updateDisplay() {
     tft.print("RSSI:");
     tft.setTextColor(TFT_WHITE);
     tft.setCursor(170, 35 + yshift);
-    tft.printf("%d", ELECHOUSE_cc1101.getRssi());    
+    tft.printf("%d", ELECHOUSE_cc1101.getRssi());
 
     // Protocol
     tft.setCursor(130, 20 + yshift);
@@ -597,15 +598,15 @@ void sendSignal() {
 }
 
 void do_sampling() {
-  
+
   micro_s = micros();
 
-  #define ALPHA 0.2  
-  float ewmaRSSI = -50;  
+  #define ALPHA 0.2
+  float ewmaRSSI = -50;
 
 for (int i = 0; i < samplesSUB; i++) {
     int rssi = ELECHOUSE_cc1101.getRssi();
-    rssi += 100;  
+    rssi += 100;
 
     ewmaRSSI = (ALPHA * rssi) + ((1 - ALPHA) * ewmaRSSI);
 
@@ -617,33 +618,33 @@ for (int i = 0; i < samplesSUB; i++) {
 }
 
   double mean = 0;
-  
+
   for (uint16_t i = 0; i < samplesSUB; i++)
         mean += vRealSUB[i];
         mean /= samplesSUB;
   for (uint16_t i = 0; i < samplesSUB; i++)
         vRealSUB[i] -= mean;
-    
+
   micro_s = micros();
-  
-  FFTSUB.Windowing(vRealSUB, samplesSUB, FFT_WIN_TYP_HAMMING, FFT_FORWARD); 
-  FFTSUB.Compute(vRealSUB, vImagSUB, samplesSUB, FFT_FORWARD); 
-  FFTSUB.ComplexToMagnitude(vRealSUB, vImagSUB, samplesSUB); 
+
+  FFTSUB.Windowing(vRealSUB, samplesSUB, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+  FFTSUB.Compute(vRealSUB, vImagSUB, samplesSUB, FFT_FORWARD);
+  FFTSUB.ComplexToMagnitude(vRealSUB, vImagSUB, samplesSUB);
 
 unsigned int left_x = 120;
-unsigned int graph_y_offset = 81; 
+unsigned int graph_y_offset = 81;
 int max_k = 0;
 
 for (int j = 0; j < samplesSUB >> 1; j++) {
-    int k = vRealSUB[j] / attenuation_num; 
+    int k = vRealSUB[j] / attenuation_num;
     if (k > max_k)
-        max_k = k; 
-    if (k > 127) k = 127; 
+        max_k = k;
+    if (k > 127) k = 127;
 
     unsigned int color = red[k] << 11 | green[k] << 5 | blue[k];
-    unsigned int vertical_x = left_x + j; 
+    unsigned int vertical_x = left_x + j;
 
-    tft.drawPixel(vertical_x, epochSUB + graph_y_offset, color); 
+    tft.drawPixel(vertical_x, epochSUB + graph_y_offset, color);
 }
 
 for (int j = 0; j < samplesSUB >> 1; j++) {
@@ -653,27 +654,27 @@ for (int j = 0; j < samplesSUB >> 1; j++) {
     if (k > 127) k = 127;
 
     unsigned int color = red[k] << 11 | green[k] << 5 | blue[k];
-    unsigned int mirrored_x = left_x - j; 
+    unsigned int mirrored_x = left_x - j;
     tft.drawPixel(mirrored_x, epochSUB + graph_y_offset, color);
 }
 
   double tattenuation = max_k / 127.0;
-  
+
   if (tattenuation > attenuation_num)
     attenuation_num = tattenuation;
-                     
+
     delay(10);
 }
 
 void readProfileCount() {
     EEPROM.get(ADDR_PROFILE_START - sizeof(int), profileCount);
     if (profileCount > MAX_PROFILES || profileCount < 0) {
-        profileCount = 0;  
+        profileCount = 0;
     }
 }
 
 void saveProfile() {
-    readProfileCount();  
+    readProfileCount();
 
     if (profileCount < MAX_PROFILES) {
         // Get custom name from user
@@ -690,13 +691,13 @@ void saveProfile() {
         newProfile.name[MAX_NAME_LENGTH - 1] = '\0'; // Ensure null termination
 
         int addr = ADDR_PROFILE_START + (profileCount * PROFILE_SIZE);
-        EEPROM.put(addr, newProfile); 
+        EEPROM.put(addr, newProfile);
         EEPROM.commit();
 
-        profileCount++;  
+        profileCount++;
 
         EEPROM.put(ADDR_PROFILE_START - sizeof(int), profileCount);
-        EEPROM.commit();  
+        EEPROM.commit();
 
         tft.fillScreen(TFT_BLACK);
         tft.setCursor(10, 30 + yshift);
@@ -713,7 +714,7 @@ void saveProfile() {
         tft.setCursor(10, 30 + yshift);
         tft.print("Profile storage full!");
     }
-    
+
     delay(2000);
     updateDisplay();
     float currentBatteryVoltage = readBatteryVoltage();
@@ -733,14 +734,14 @@ void runUI() {
     #define STATUS_BAR_HEIGHT 16
     #define ICON_SIZE 16
     #define ICON_NUM 5 // Increased to include the back icon
-    
+
     static int iconX[ICON_NUM] = {90, 130, 170, 210, 10}; // Added back icon at x=10
     static int iconY = STATUS_BAR_Y_OFFSET;
-    
+
     static const unsigned char* icons[ICON_NUM] = {
-        bitmap_icon_sort_up_plus,    
-        bitmap_icon_sort_down_minus,      
-        bitmap_icon_antenna,    
+        bitmap_icon_sort_up_plus,
+        bitmap_icon_sort_down_minus,
+        bitmap_icon_antenna,
         bitmap_icon_floppy,
         bitmap_icon_go_back // Added back icon
     };
@@ -748,18 +749,18 @@ void runUI() {
     if (!uiDrawn) {
         tft.drawLine(0, 19, 240, 19, TFT_WHITE);
         tft.fillRect(0, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH, STATUS_BAR_HEIGHT, DARK_GRAY);
-        
+
         for (int i = 0; i < ICON_NUM; i++) {
-            if (icons[i] != NULL) {  
+            if (icons[i] != NULL) {
                 tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, TFT_WHITE);
-            } 
+            }
         }
         tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
-        uiDrawn = true;               
+        uiDrawn = true;
     }
 
     static unsigned long lastAnimationTime = 0;
-    static int animationState = 0;  
+    static int animationState = 0;
     static int activeIcon = -1;
 
     if (animationState > 0 && millis() - lastAnimationTime >= 150) {
@@ -814,10 +815,10 @@ void runUI() {
                     EEPROM.commit();
                     updateDisplay();
                     break;
-                case 2: 
+                case 2:
                     sendSignal();
                     break;
-                case 3: 
+                case 3:
                     saveProfile();
                     break;
                 case 4: // Back icon action (exit to submenu)
@@ -835,10 +836,10 @@ void runUI() {
     }
 
     static unsigned long lastTouchCheck = 0;
-    const unsigned long touchCheckInterval = 50; 
+    const unsigned long touchCheckInterval = 50;
 
     if (millis() - lastTouchCheck >= touchCheckInterval) {
-        if (ts.touched() && feature_active) { 
+        if (ts.touched() && feature_active) {
             TS_Point p = ts.getPoint();
             int x = ::map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
             int y = ::map(p.y, TS_MAXY, TS_MINY, 0, SCREENHEIGHT - 1);
@@ -862,6 +863,9 @@ void runUI() {
 }
 
 void ReplayAttackSetup() {
+  blockFeatureIfMissing(HW_CC1101);
+  if (feature_exit_requested) return;
+
   Serial.begin(115200);
 
   // NRF24 cleanup - release pins and SPI bus before CC1101 init
@@ -911,6 +915,7 @@ void ReplayAttackSetup() {
   ELECHOUSE_cc1101.setGDO(RX_PIN, TX_PIN);  // GDO0=16 (TX), GDO2=26 (RX)
   Serial.printf("[CC1101] GDO pins: GDO0=%d (TX-OUTPUT), GDO2=%d (RX-INPUT)\n", RX_PIN, TX_PIN);
 
+  ELECHOUSE_cc1101.setSpiPin(BOARD_RADIO_SCK, BOARD_RADIO_MISO, BOARD_RADIO_MOSI, BOARD_CC1101_CSN);
   ELECHOUSE_cc1101.Init();
 
   // ========== CC1101 DIAGNOSTIC CHECK ==========
@@ -973,15 +978,15 @@ void ReplayAttackSetup() {
   subghz_receive_active = true;
   mySwitch.enableTransmit(RX_PIN);  // GDO0 = pin 16 = TX data TO CC1101
   Serial.printf("[RCSwitch] RX on GDO2=pin%d, TX on GDO0=pin%d\n", TX_PIN, RX_PIN);
-      
+
   //ELECHOUSE_cc1101.setSpiPin (SCK, MISO, MOSI, CSN);
   //ELECHOUSE_cc1101.setSpiPin (18, 19, 23, 27);
 
   //ELECHOUSE_cc1101.setGDO(gdo0, gdo2);
   //ELECHOUSE_cc1101.setGDO(26, 16);
-  //mySwitch.enableReceive(16); 
-  //mySwitch.enableTransmit(26); 
-  
+  //mySwitch.enableReceive(16);
+  //mySwitch.enableTransmit(26);
+
   pcf.pinMode(BTN_LEFT, INPUT_PULLUP);
   pcf.pinMode(BTN_RIGHT, INPUT_PULLUP);
   pcf.pinMode(BTN_UP, INPUT_PULLUP);
@@ -1002,14 +1007,14 @@ void ReplayAttackSetup() {
   for (int i = 64; i < 96; i++) {
     red[i] = 31;
     green[i] = (i - 64) * 2;
-    blue[i] = 0;        
+    blue[i] = 0;
   }
   for (int i = 96; i < 128; i++) {
     red[i] = 31;
     green[i] = 63;
-    blue[i] = i - 96;        
+    blue[i] = i - 96;
   }
-  
+
    float currentBatteryVoltage = readBatteryVoltage();
    drawStatusBar(currentBatteryVoltage, false);
 
@@ -1064,7 +1069,7 @@ void ReplayAttackLoop() {
 
     runUI();
     //updateStatusBar();
-  
+
     static unsigned long lastDebounceTime = 0;
     const unsigned long debounceDelay = 200;
 
@@ -1072,7 +1077,7 @@ void ReplayAttackLoop() {
     int btnRightState = pcf.digitalRead(BTN_RIGHT);
     int btnSelectState = pcf.digitalRead(BTN_UP);
     int btndownState = pcf.digitalRead(BTN_DOWN);
-    
+
     do_sampling();
     delay(10);
     epochSUB++;
@@ -1238,18 +1243,18 @@ void ReplayAttackLoop() {
         lastDebounceTime = millis();
     }
 
-    if (mySwitch.available()) { 
-        receivedValue = mySwitch.getReceivedValue(); 
-        receivedBitLength = mySwitch.getReceivedBitlength(); 
-        receivedProtocol = mySwitch.getReceivedProtocol(); 
+    if (mySwitch.available()) {
+        receivedValue = mySwitch.getReceivedValue();
+        receivedBitLength = mySwitch.getReceivedBitlength();
+        receivedProtocol = mySwitch.getReceivedProtocol();
 
         EEPROM.put(ADDR_VALUE, receivedValue);
         EEPROM.put(ADDR_BITLEN, receivedBitLength);
         EEPROM.put(ADDR_PROTO, receivedProtocol);
         EEPROM.commit();
-        
+
         updateDisplay();
-        mySwitch.resetAvailable(); 
+        mySwitch.resetAvailable();
     }
 
      if (btnSelectState == LOW && receivedValue != 0 && millis() - lastDebounceTime > debounceDelay) {
@@ -1260,15 +1265,15 @@ void ReplayAttackLoop() {
          saveProfile();
          lastDebounceTime = millis();
     }
-  } 
+  }
 }
 
 
 /*
- * 
+ *
  * Saved Profile
- * 
- * 
+ *
+ *
  */
 
 namespace SavedProfile {
@@ -1287,8 +1292,8 @@ static bool uiDrawn = false;
 #define BTN_LEFT   BOARD_BUTTON_LEFT
 #define BTN_RIGHT  BOARD_BUTTON_RIGHT
 
-#define SCREEN_WIDTH 240 
-#define SCREEN_HEIGHT 320 
+#define SCREEN_WIDTH 240
+#define SCREEN_HEIGHT 320
 
 RCSwitch mySwitch = RCSwitch();
 
@@ -1411,8 +1416,8 @@ void loadProfileCount() {
 
     if (profileCount < 0 || profileCount > MAX_PROFILES) {
         profileCount = 0;
-        EEPROM.put(ADDR_PROFILE_START - 4, profileCount);  
-        EEPROM.commit();  
+        EEPROM.put(ADDR_PROFILE_START - 4, profileCount);
+        EEPROM.commit();
     }
 }
 
@@ -1436,7 +1441,7 @@ void printProfiles() {
 }
 
 void deleteProfile(int index) {
-    if (index >= profileCount || index < 0) return;  
+    if (index >= profileCount || index < 0) return;
 
     Profile deletedProfile;
     int addr = ADDR_PROFILE_START + (index * PROFILE_SIZE);
@@ -1455,7 +1460,7 @@ void deleteProfile(int index) {
     EEPROM.put(ADDR_PROFILE_START + ((profileCount - 1) * PROFILE_SIZE), emptyProfile);
 
     profileCount--;
-    EEPROM.put(ADDR_PROFILE_START - 4, profileCount);  
+    EEPROM.put(ADDR_PROFILE_START - 4, profileCount);
     EEPROM.commit();
 
     if (profileCount == 0) {
@@ -1478,15 +1483,16 @@ void runUI() {
     #define STATUS_BAR_Y_OFFSET 20
     #define STATUS_BAR_HEIGHT 16
     #define ICON_SIZE 16
+    #undef ICON_NUM
     #define ICON_NUM 5
-    
+
     static int iconX[ICON_NUM] = {90, 130, 170, 210, 10};
     static int iconY = STATUS_BAR_Y_OFFSET;
-    
+
     static const unsigned char* icons[ICON_NUM] = {
-        bitmap_icon_sort_down_minus,    
-        bitmap_icon_sort_up_plus,       
-        bitmap_icon_antenna,     
+        bitmap_icon_sort_down_minus,
+        bitmap_icon_sort_up_plus,
+        bitmap_icon_antenna,
         bitmap_icon_recycle,
         bitmap_icon_go_back // Back icon
     };
@@ -1494,18 +1500,18 @@ void runUI() {
     if (!uiDrawn) {
         tft.drawLine(0, 19, 240, 19, TFT_WHITE);
         tft.fillRect(0, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH, STATUS_BAR_HEIGHT, DARK_GRAY);
-        
+
         for (int i = 0; i < ICON_NUM; i++) {
-            if (icons[i] != NULL) {  
+            if (icons[i] != NULL) {
                 tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, TFT_WHITE);
-            } 
+            }
         }
         tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
         uiDrawn = true;
     }
 
     static unsigned long lastAnimationTime = 0;
-    static int animationState = 0;  
+    static int animationState = 0;
     static int activeIcon = -1;
 
     if (animationState > 0 && millis() - lastAnimationTime >= 150) {
@@ -1551,7 +1557,7 @@ void runUI() {
     }
 
     static unsigned long lastTouchCheck = 0;
-    const unsigned long touchCheckInterval = 50;  
+    const unsigned long touchCheckInterval = 50;
 
     if (millis() - lastTouchCheck >= touchCheckInterval) {
         if (ts.touched() && feature_active) {
@@ -1578,6 +1584,9 @@ void runUI() {
 }
 
 void saveSetup() {
+    blockFeatureIfMissing(HW_CC1101);
+    if (feature_exit_requested) return;
+
     Serial.begin(115200);
 
     // NRF24 cleanup - release pins and SPI bus before CC1101 init
@@ -1611,6 +1620,7 @@ void saveSetup() {
     // GDO0 (pin 16) = OUTPUT (TX data TO CC1101)
     // GDO2 (pin 26) = INPUT (RX data FROM CC1101 in async mode)
     ELECHOUSE_cc1101.setGDO(RX_PIN, TX_PIN);
+    ELECHOUSE_cc1101.setSpiPin(BOARD_RADIO_SCK, BOARD_RADIO_MISO, BOARD_RADIO_MOSI, BOARD_CC1101_CSN);
     ELECHOUSE_cc1101.Init();
     ELECHOUSE_cc1101.setCCMode(0);       // Async/RCSwitch mode (IOCFG0=0x0D)
     ELECHOUSE_cc1101.setModulation(2);   // ASK/OOK
@@ -1626,7 +1636,7 @@ void saveSetup() {
 
 void saveLoop() {
     runUI();
-    
+
     static unsigned long lastDebounceTime = 0;
     const unsigned long debounceDelay = 200;
 
@@ -1654,7 +1664,7 @@ void saveLoop() {
         }
 
         if (btnUpState == LOW && millis() - lastDebounceTime > debounceDelay) {
-            deleteProfile(currentProfileIndex);  
+            deleteProfile(currentProfileIndex);
             lastDebounceTime = millis();
         }
     } else {
@@ -1669,10 +1679,10 @@ void saveLoop() {
 
 
 /*
- * 
+ *
  * subGHz jammer
- * 
- * 
+ *
+ *
  */
 
 namespace subjammer {
@@ -1698,25 +1708,25 @@ const unsigned long debounceDelay = 200;
 
 bool jammingRunning = false;
 bool continuousMode = true;
-bool autoMode = false;     
+bool autoMode = false;
 unsigned long lastSweepTime = 0;
-const unsigned long sweepInterval = 1000; 
+const unsigned long sweepInterval = 1000;
 
 static const uint32_t subghz_frequency_list[] = {
-    300000000, 303875000, 304250000, 310000000, 315000000, 318000000,  
-    390000000, 418000000, 433075000, 433420000, 433920000, 434420000, 
+    300000000, 303875000, 304250000, 310000000, 315000000, 318000000,
+    390000000, 418000000, 433075000, 433420000, 433920000, 434420000,
     434775000, 438900000, 868350000, 915000000, 925000000
 };
 const int numFrequencies = sizeof(subghz_frequency_list) / sizeof(subghz_frequency_list[0]);
-int currentFrequencyIndex = 4; 
+int currentFrequencyIndex = 4;
 float targetFrequency = subghz_frequency_list[currentFrequencyIndex] / 1000000.0;
 
 
 void updateDisplay() {
 
     int yshift = 20;
-    
-    tft.fillRect(0, 40, 240, 80, TFT_BLACK); 
+
+    tft.fillRect(0, 40, 240, 80, TFT_BLACK);
     tft.drawLine(0, 79, 235, 79, TFT_WHITE);
 
     // Frequency section
@@ -1765,7 +1775,7 @@ void updateDisplay() {
 
     } else {
         tft.setTextColor(TFT_YELLOW);
-        tft.print("Idle   "); 
+        tft.print("Idle   ");
     }
 }
 
@@ -1776,15 +1786,16 @@ void runUI() {
     #define STATUS_BAR_Y_OFFSET 20
     #define STATUS_BAR_HEIGHT 16
     #define ICON_SIZE 16
-    #define ICON_NUM 6 
-    
+    #undef ICON_NUM
+    #define ICON_NUM 6
+
     static int iconX[ICON_NUM] = {50, 90, 130, 170, 210, 10}; // Added back icon at x=10
     static int iconY = STATUS_BAR_Y_OFFSET;
-    
+
     static const unsigned char* icons[ICON_NUM] = {
-        bitmap_icon_power,    
-        bitmap_icon_antenna,      
-        bitmap_icon_random,    
+        bitmap_icon_power,
+        bitmap_icon_antenna,
+        bitmap_icon_random,
         bitmap_icon_sort_down_minus,
         bitmap_icon_sort_up_plus,
         bitmap_icon_go_back // Added back icon
@@ -1793,18 +1804,18 @@ void runUI() {
     if (!uiDrawn) {
         tft.drawLine(0, 19, 240, 19, TFT_WHITE);
         tft.fillRect(0, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH, STATUS_BAR_HEIGHT, DARK_GRAY);
-        
+
         for (int i = 0; i < ICON_NUM; i++) {
-            if (icons[i] != NULL) {  
+            if (icons[i] != NULL) {
                 tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, TFT_WHITE);
-            } 
+            }
         }
         tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
-        uiDrawn = true;               
+        uiDrawn = true;
     }
 
     static unsigned long lastAnimationTime = 0;
-    static int animationState = 0;  
+    static int animationState = 0;
     static int activeIcon = -1;
 
     if (animationState > 0 && millis() - lastAnimationTime >= 150) {
@@ -1827,14 +1838,14 @@ void runUI() {
                     updateDisplay();
                     lastDebounceTime = millis();
                     break;
-                case 1: 
+                case 1:
                  continuousMode = !continuousMode;
                   Serial.print("Jamming mode: ");
                   Serial.println(continuousMode ? "Continuous Carrier" : "Noise");
                   updateDisplay();
                   lastDebounceTime = millis();
                     break;
-                case 2: 
+                case 2:
                   autoMode = !autoMode;
                   Serial.print("Frequency mode: ");
                   Serial.println(autoMode ? "Automatic" : "Manual");
@@ -1846,7 +1857,7 @@ void runUI() {
                   updateDisplay();
                   lastDebounceTime = millis();
                     break;
-                case 3: 
+                case 3:
                   currentFrequencyIndex = (currentFrequencyIndex - 1 + numFrequencies) % numFrequencies;
                   targetFrequency = subghz_frequency_list[currentFrequencyIndex] / 1000000.0;
                   ELECHOUSE_cc1101.setMHZ(targetFrequency);
@@ -1856,7 +1867,7 @@ void runUI() {
                   updateDisplay();
                   lastDebounceTime = millis();
                     break;
-                 case 4: 
+                 case 4:
                   currentFrequencyIndex = (currentFrequencyIndex + 1) % numFrequencies;
                   targetFrequency = subghz_frequency_list[currentFrequencyIndex] / 1000000.0;
                   ELECHOUSE_cc1101.setMHZ(targetFrequency);
@@ -1881,10 +1892,10 @@ void runUI() {
     }
 
     static unsigned long lastTouchCheck = 0;
-    const unsigned long touchCheckInterval = 50; 
+    const unsigned long touchCheckInterval = 50;
 
     if (millis() - lastTouchCheck >= touchCheckInterval) {
-        if (ts.touched() && feature_active) { 
+        if (ts.touched() && feature_active) {
             TS_Point p = ts.getPoint();
             int x = ::map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
             int y = ::map(p.y, TS_MAXY, TS_MINY, 0, SCREENHEIGHT - 1);
@@ -1988,6 +1999,9 @@ bool rmtNoiseBurst() {
 // }
 
 void subjammerSetup() {
+    blockFeatureIfMissing(HW_CC1101);
+    if (feature_exit_requested) return;
+
     Serial.begin(115200);
     Serial.println("[JAMMER-SETUP] Initializing Sub-GHz Jammer...");
     Serial.flush();
@@ -2010,6 +2024,7 @@ void subjammerSetup() {
 
     // Set GDO0 pin BEFORE Init()
     ELECHOUSE_cc1101.setGDO0(RX_PIN);
+    ELECHOUSE_cc1101.setSpiPin(BOARD_RADIO_SCK, BOARD_RADIO_MISO, BOARD_RADIO_MOSI, BOARD_CC1101_CSN);
     ELECHOUSE_cc1101.Init();
     ELECHOUSE_cc1101.setModulation(2);  // ASK/OOK modulation (0=2-FSK, 1=GFSK, 2=ASK, 3=4-FSK, 4=MSK)
     ELECHOUSE_cc1101.setRxBW(500.0);
@@ -2026,7 +2041,7 @@ void subjammerSetup() {
     pcf.pinMode(BTN_UP, INPUT_PULLUP);
     delay(100);
 
-    tft.setRotation(0); 
+    tft.setRotation(0);
     tft.fillScreen(TFT_BLACK);
 
     setupTouchscreen();
@@ -2038,9 +2053,9 @@ void subjammerSetup() {
 }
 
 void subjammerLoop() {
-  
+
     runUI();
-    
+
     int btnLeftState = pcf.digitalRead(BTN_LEFT);
     int btnRightState = pcf.digitalRead(BTN_RIGHT);
     int btnUpState = pcf.digitalRead(BTN_UP);
@@ -2071,7 +2086,7 @@ void subjammerLoop() {
         updateDisplay();
         lastDebounceTime = millis();
     }
-      
+
     if (btnLeftState == LOW && !autoMode && millis() - lastDebounceTime > debounceDelay) {
         continuousMode = !continuousMode;
         Serial.print("Jamming mode: ");
@@ -2153,8 +2168,7 @@ void subjammerLoop() {
 namespace subbrute {
 
 static bool uiDrawn = false;
-#define RX_PIN BOARD_CC1101_GDO0
-#define TX_PIN BOARD_CC1101_GDO2
+#define CC1101_TX_DATA_PIN BOARD_CC1101_GDO0
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 320
 
@@ -2260,7 +2274,7 @@ bool initRMT() {
     if (rmtInitialized) return true;
 
     rmt_tx_channel_config_t txCfg = {};
-    txCfg.gpio_num = (gpio_num_t)TX_PIN;
+    txCfg.gpio_num = (gpio_num_t)CC1101_TX_DATA_PIN;
     txCfg.clk_src = RMT_CLK_SRC_DEFAULT;
     txCfg.resolution_hz = 1000000;      // 1 MHz -> 1 us per tick
     txCfg.mem_block_symbols = 64;
@@ -2320,7 +2334,7 @@ void rmtTransmit(rmt_item32_t* items, size_t numItems) {
 
 #else
 
-// ── Original ESP32-DIV V1 / ESP-IDF 4: legacy driver/rmt.h implementation ────
+// ── ESP-IDF < 5: legacy driver/rmt.h implementation ──────────────────────────
 // Initialize RMT for OOK transmission
 bool initRMT() {
     Serial.println("[RMT-INIT] initRMT() called");
@@ -2332,7 +2346,8 @@ bool initRMT() {
         return true;
     }
 
-    Serial.printf("[RMT-INIT] TX_PIN = %d, Channel = %d\n", TX_PIN, RMT_TX_CHANNEL);
+    Serial.printf("[RMT-INIT] CC1101 TX data pin = %d, Channel = %d\n",
+                  CC1101_TX_DATA_PIN, RMT_TX_CHANNEL);
     Serial.flush();
 
     // Manual config (portable across ESP-IDF versions)
@@ -2341,7 +2356,7 @@ bool initRMT() {
 
     config.rmt_mode = RMT_MODE_TX;
     config.channel = RMT_TX_CHANNEL;
-    config.gpio_num = (gpio_num_t)TX_PIN;
+    config.gpio_num = (gpio_num_t)CC1101_TX_DATA_PIN;
     config.clk_div = RMT_CLK_DIV;  // 80MHz / 80 = 1MHz = 1us per tick
     config.mem_block_num = 4;      // 4 * 64 = 256 symbols max
 
@@ -2515,31 +2530,6 @@ int nextDeBruijnBit() {
         }
     }
     return -1;
-}
-
-// Transmit a single bit using OOK with protocol timing
-void transmitBit(bool bit, const ProtocolDef& proto) {
-    if (bit) {
-        // '1' bit: long HIGH, short LOW (or inverse for some protocols)
-        digitalWrite(BOARD_CC1101_CSN, HIGH);
-        delayMicroseconds(proto.longPulse);
-        digitalWrite(TX_PIN, LOW);
-        delayMicroseconds(proto.shortPulse);
-    } else {
-        // '0' bit: short HIGH, long LOW
-        digitalWrite(BOARD_CC1101_CSN, HIGH);
-        delayMicroseconds(proto.shortPulse);
-        digitalWrite(TX_PIN, LOW);
-        delayMicroseconds(proto.longPulse);
-    }
-}
-
-// Transmit pilot/sync pulse (uses safe delay for long pulses)
-void transmitPilot(const ProtocolDef& proto) {
-    digitalWrite(BOARD_CC1101_CSN, HIGH);
-    safeDelayMicroseconds(proto.pilotHigh);
-    digitalWrite(TX_PIN, LOW);
-    safeDelayMicroseconds(proto.pilotLow);  // FIX BUG 2: pilotLow can be >16383us
 }
 
 // FIX BUG 6: RCSwitch protocol mapping for each supported protocol
@@ -3116,6 +3106,7 @@ void runUI() {
     #define STATUS_BAR_Y_OFFSET 20
     #define STATUS_BAR_HEIGHT 16
     #define ICON_SIZE 16
+    #undef ICON_NUM
     #define ICON_NUM 5
 
     static int iconX[ICON_NUM] = {50, 90, 130, 170, 10};
@@ -3251,6 +3242,9 @@ void runUI() {
 }
 
 void subBruteSetup() {
+    blockFeatureIfMissing(HW_CC1101);
+    if (feature_exit_requested) return;
+
     Serial.begin(115200);
 
     // NRF24 cleanup - release pins and SPI bus before CC1101 init
@@ -3265,7 +3259,8 @@ void subBruteSetup() {
     cleanupDeBruijn();
 
     // Set GDO0 pin BEFORE Init()
-    ELECHOUSE_cc1101.setGDO0(RX_PIN);
+    ELECHOUSE_cc1101.setGDO0(CC1101_TX_DATA_PIN);
+    ELECHOUSE_cc1101.setSpiPin(BOARD_RADIO_SCK, BOARD_RADIO_MISO, BOARD_RADIO_MOSI, BOARD_CC1101_CSN);
     ELECHOUSE_cc1101.Init();
     ELECHOUSE_cc1101.setModulation(2);  // ASK/OOK
     ELECHOUSE_cc1101.setMHZ(protocols[currentProtocol].frequency / 1000000.0);
@@ -3276,7 +3271,7 @@ void subBruteSetup() {
         Serial.println("[ERROR] RMT init failed - falling back to software timing");
     }
 
-    bruteSwitch.enableTransmit(RX_PIN);  // RX_PIN=16=GDO0 is TX data line
+    bruteSwitch.enableTransmit(CC1101_TX_DATA_PIN);  // CC1101_TX_DATA_PIN=16=GDO0 is TX data line
 
     pcf.pinMode(BTN_LEFT, INPUT_PULLUP);
     pcf.pinMode(BTN_RIGHT, INPUT_PULLUP);

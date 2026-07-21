@@ -4,9 +4,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // RMT driver compatibility layer
 // ═══════════════════════════════════════════════════════════════════════════
-// SubGHz OOK transmission uses the ESP32 RMT peripheral. The original ESP32-DIV
-// uses the legacy driver (driver/rmt.h, rmt_item32_t, rmt_driver_install,
-// rmt_write_items).
+// SubGHz OOK transmission uses the ESP32 RMT peripheral. Older ESP-IDF
+// versions (< 5) only have the legacy driver (driver/rmt.h, rmt_item32_t,
+// rmt_driver_install, rmt_write_items).
 //
 // On the ESP32-C5 (Arduino core 3.x / ESP-IDF 5) the core already uses the new
 // RMT driver ("driver_ng"). ESP-IDF forbids linking the legacy and new RMT

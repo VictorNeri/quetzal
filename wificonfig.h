@@ -13,7 +13,7 @@
 void cleanupSD();
 
 #include <WiFi.h>
-#include <TFT_eSPI.h> 
+#include <TFT_eSPI.h>
 #include "buttons_compat.h"
 #include <XPT2046_Touchscreen.h>
 
@@ -87,6 +87,11 @@ namespace Deauther {
 namespace FirmwareUpdate {
   void updateSetup();
   void updateLoop();
+  // Reusable STA connect flow: select SSID + enter password + WiFi.begin() +
+  // poll. Returns true once WL_CONNECTED, false on user-cancel or timeout.
+  bool connectToWiFiInteractive();
+  // Same, but for an already-known SSID - skips straight to password entry.
+  bool connectToKnownSSID(const char* ssid);
 }
 
 

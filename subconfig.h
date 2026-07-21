@@ -5,9 +5,9 @@
 
 #include "utils.h"
 #include "arduinoFFT.h"
-#include <TFT_eSPI.h> 
+#include <TFT_eSPI.h>
 #include "buttons_compat.h"
-#include <ELECHOUSE_CC1101_ESP32DIV.h>
+#include <ELECHOUSE_CC1101_QUETZAL.h>
 
 #include <RCSwitch.h>
 #include <EEPROM.h>

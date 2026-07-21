@@ -1,13 +1,12 @@
 #!/bin/bash
 # =============================================================================
-#        ESP32-DIV HaleHound Edition - NM-CYD-C5 (ESP32-C5) Flash Script
+#                    Quetzal - NM-CYD-C5 Flash Script
 # =============================================================================
 # Flashes the ESP32-C5 build produced by:  pio run -e nm-cyd-c5
 #
-# Do NOT use flash_linux.sh for this board: that script targets --chip esp32
-# (Xtensa) with an 0x1000 bootloader offset. The ESP32-C5 is RISC-V and its
-# bootloader lives at 0x2000, so the classic script produces a board that never
-# boots (dark screen).
+# The ESP32-C5 is RISC-V and its bootloader lives at 0x2000 (classic Xtensa
+# ESP32 boards use 0x1000), so a generic esptool invocation for those boards
+# would produce a board that never boots (dark screen).
 #
 # Offsets below come from the C5 ESP-IDF sdkconfig and this project's
 # partitions_c5_16mb.csv:
@@ -19,19 +18,28 @@
 set -euo pipefail
 
 echo "================================================================================"
-echo "        ESP32-DIV HaleHound Edition - NM-CYD-C5 (ESP32-C5) Flash Script"
+echo "                    Quetzal - NM-CYD-C5 Flash Script"
 echo "================================================================================"
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/.pio/build/nm-cyd-c5"
 
+# PlatformIO is often installed in its private environment without adding
+# `pio` to PATH. Accept either installation style.
+PIO_CMD=""
+if command -v pio >/dev/null 2>&1; then
+  PIO_CMD="$(command -v pio)"
+elif [ -x "$HOME/.platformio/penv/bin/pio" ]; then
+  PIO_CMD="$HOME/.platformio/penv/bin/pio"
+fi
+
 # --- Build if the firmware artifacts are missing -----------------------------
 if [ ! -f "$BUILD_DIR/firmware.bin" ]; then
   echo "No build found in $BUILD_DIR"
-  if command -v pio >/dev/null 2>&1; then
+  if [ -n "$PIO_CMD" ]; then
     echo "Building the nm-cyd-c5 environment first..."
-    pio run -e nm-cyd-c5
+    "$PIO_CMD" run -e nm-cyd-c5
   else
     echo "ERROR: firmware not built and 'pio' is not on PATH."
     echo "Run:  pio run -e nm-cyd-c5   (or install PlatformIO), then re-run this script."
@@ -92,5 +100,9 @@ echo ""
 echo ""
 echo "================================================================================"
 echo "Flash complete! Press RESET on your device or unplug/replug USB."
-echo "Watch it boot with:  pio device monitor -e nm-cyd-c5"
+if [ -n "$PIO_CMD" ]; then
+  echo "Watch it boot with:  $PIO_CMD device monitor -e nm-cyd-c5"
+else
+  echo "Watch serial output at 115200 baud."
+fi
 echo "================================================================================"

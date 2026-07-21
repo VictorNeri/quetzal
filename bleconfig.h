@@ -13,11 +13,11 @@
 // Call this BEFORE any SD card operations to release GPIO 5 from NRF24
 void cleanupNRF24();
 
-#include <TFT_eSPI.h> 
+#include <TFT_eSPI.h>
 #include "buttons_compat.h"
 #include <XPT2046_Touchscreen.h>
 
-#include "ble_compat.h"  // Bluedroid on ESP32-DIV V1, NimBLE on NM-CYD-C5
+#include "ble_compat.h"  // NimBLE stack type aliases
 #include <Arduino.h>
 #include <SPI.h>
 #include <nRF24L01.h>
@@ -74,12 +74,6 @@ namespace WLANJammer {
 namespace ProtoKill {
   void prokillLoop();
   void prokillSetup();
-}
-
-namespace BleSniffer {
-  void blesnifferLoop();
-  void blesnifferSetup();
-  void blesnifferCleanup();
 }
 
 #endif // CONFIG_H

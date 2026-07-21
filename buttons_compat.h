@@ -4,11 +4,10 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // Button input compatibility layer
 // ═══════════════════════════════════════════════════════════════════════════
-// The original ESP32-DIV reads five navigation buttons through a PCF8574 I2C
-// expander (the global `pcf` object). The NM-CYD-C5 has no PCF8574 and no
-// physical buttons, so on that board `pcf` is a drop-in, touch-backed stand-in:
-// it maps on-screen touch zones to the same button pins, so every existing
-// `pcf.digitalRead(BTN_*)` / `pcf.pinMode()` call site keeps working via touch.
+// The NM-CYD-C5 has no PCF8574 I2C expander and no physical buttons, so `pcf`
+// is a touch-backed stand-in: it maps on-screen touch zones to the same
+// button pins the rest of the firmware already reads via
+// `pcf.digitalRead(BTN_*)` / `pcf.pinMode()`.
 //
 // Zone layout (only while a feature is active, i.e. NOT on the main menu, which
 // has its own touch navigation, and skipping the top status-bar/back-icon strip
@@ -23,14 +22,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 #include "board_config.h"
-
-#if BOARD_HAS_PCF8574
-
-#include <PCF8574.h>
-typedef PCF8574 ButtonExpander;
-
-#else
-
 #include <Arduino.h>
 #include "Touchscreen.h"  // ts, feature_active, TS_MIN/MAX*, DISPLAY_WIDTH/HEIGHT
 
@@ -82,7 +73,5 @@ private:
 };
 
 typedef TouchButtonExpander ButtonExpander;
-
-#endif // BOARD_HAS_PCF8574
 
 #endif // BUTTONS_COMPAT_H

@@ -1,42 +1,37 @@
 #ifndef SHARED_H
 #define SHARED_H
 
-// ========== HALEHOUND COLOR PALETTE ==========
-// Jesse's Custom: Red/Purple/Pink theme (no yellow/orange)
-const uint16_t HALEHOUND_MAGENTA = 0x041F;  // Electric Blue - Primary (selected items)
-const uint16_t HALEHOUND_HOTPINK = 0xF81F;  // Hot Pink - Accents
-const uint16_t HALEHOUND_BRIGHT = 0xF81F;   // Hot Pink - Highlights
-const uint16_t HALEHOUND_VIOLET = 0x780F;   // Purple - Accent color
-const uint16_t HALEHOUND_DARK = 0x2841;     // #2B080A - Dark backgrounds
-const uint16_t HALEHOUND_CYAN = 0xF81F;     // Hot Pink for text (was cyan/blue)
-const uint16_t HALEHOUND_BLACK = 0x0000;    // #000000 - Pure black
-const uint16_t HALEHOUND_GUNMETAL = 0x18E3; // #1C1C1C - Gunmetal gray
-const uint16_t HALEHOUND_GREEN = 0x780F;    // Purple (was neon green)
+// ========== UI COLOR PALETTE ==========
+// Terminal/CRT green theme, matching the boot splash artwork.
+const uint16_t UI_MAGENTA = 0x3FE8;  // Bright green - Accents
+const uint16_t UI_HOTPINK = 0x1EEB;  // Mid green - Accents
+const uint16_t UI_BRIGHT = 0x1EEB;   // Mid green - Highlights
+const uint16_t UI_VIOLET = 0x04A8;   // Darker green - Secondary accent
+const uint16_t UI_DARK = 0x0102;     // Near-black green - Dark backgrounds
+const uint16_t UI_CYAN = 0x174D;     // Terminal green - body text (most-used color)
+const uint16_t UI_BLACK = 0x0000;    // #000000 - Pure black
+const uint16_t UI_GUNMETAL = 0x1143; // Dark green-gray - borders/dim UI
+const uint16_t UI_GREEN = 0x04A8;    // Darker green
+// Amber CRT accent - deliberately outside the green family so the
+// currently-selected menu/list item reads clearly against both the black
+// background and the green body text (UI_CYAN) around it.
+const uint16_t UI_AMBER = 0xFD80;    // #FFB000 amber - selected-item highlight
 
-// Legacy color mappings (mapped to HALEHOUND palette)
-const uint16_t SHREDDY_TEAL = HALEHOUND_CYAN;       // Remap teal -> cyan
-const uint16_t SHREDDY_PINK = HALEHOUND_MAGENTA;    // Remap pink -> magenta
-const uint16_t SHREDDY_BLACK = HALEHOUND_BLACK;
-const uint16_t SHREDDY_BLUE = HALEHOUND_CYAN;
-const uint16_t SHREDDY_PURPLE = HALEHOUND_VIOLET;
-const uint16_t SHREDDY_GREEN = HALEHOUND_GREEN;
-const uint16_t SHREDDY_GUNMETAL = HALEHOUND_GUNMETAL;
-
-const uint16_t ORANGE = HALEHOUND_MAGENTA;   // Use magenta instead of orange
+const uint16_t ORANGE = UI_MAGENTA;   // Use magenta instead of orange
 const uint16_t GRAY = 0x8410;
-const uint16_t BLUE = HALEHOUND_CYAN;
+const uint16_t BLUE = UI_CYAN;
 const uint16_t RED = 0xF800;
-const uint16_t GREEN = HALEHOUND_GREEN;
+const uint16_t GREEN = UI_GREEN;
 const uint16_t BLACK = 0x0000;
 const uint16_t WHITE = 0xFFFF;
 const uint16_t LIGHT_GRAY = 0xC618;
-const uint16_t DARK_GRAY = HALEHOUND_GUNMETAL;
+const uint16_t DARK_GRAY = UI_GUNMETAL;
 
 #define TFT_DARKBLUE  0x3166
-#define TFT_LIGHTBLUE HALEHOUND_CYAN
+#define TFT_LIGHTBLUE UI_CYAN
 #define TFTWHITE     0xFFFF
 #define TFT_GRAY      0x8410
-#define SELECTED_ICON_COLOR HALEHOUND_MAGENTA
+#define SELECTED_ICON_COLOR UI_AMBER
 
 void displaySubmenu();
 

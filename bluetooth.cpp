@@ -7,7 +7,9 @@ extern void cleanupSD();
 #include "icon.h"
 #include "Touchscreen.h"
 #include <RCSwitch.h>
-#include <ELECHOUSE_CC1101_ESP32DIV.h>
+#include <ELECHOUSE_CC1101_QUETZAL.h>
+#include <cstring>
+#include "hw_detect.h"
 
 // External reference to SubGHz RCSwitch object (defined in subghz.cpp replayat namespace)
 namespace replayat {
@@ -146,11 +148,81 @@ const uint8_t DEVICES[][31] = {
   {0x1e, 0xff, 0x4c, 0x00, 0x07, 0x19, 0x07, 0x16, 0x20, 0x75, 0xaa, 0x30, 0x01, 0x00, 0x00, 0x45, 0x12, 0x12, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 };
 
+// device_choice == 1: iBeacon. UUID/major/minor are re-randomized each time
+// IBeacon() is selected (see below) so repeated spoofing doesn't advertise a
+// fixed, trackable identity.
+uint8_t iBeaconUuid[16];
+uint16_t iBeaconMajor = 1;
+uint16_t iBeaconMinor = 1;
+const int8_t iBeaconTxPower = -59;  // typical "measured power at 1m" reference value
+
+void randomizeIBeacon() {
+  for (int i = 0; i < 16; i++) iBeaconUuid[i] = random(256);
+  iBeaconMajor = random(1, 65536);
+  iBeaconMinor = random(1, 65536);
+}
+
+// Builds a complete iBeacon manufacturer-data AD structure (length-prefixed,
+// ready for bleCompatAddRawAdvData). Returns the structure length.
+size_t buildIBeaconAdvData(uint8_t* buf, size_t bufLen) {
+  const size_t needed = 27;  // 1 (len) + 26 (payload)
+  if (bufLen < needed) return 0;
+
+  size_t i = 0;
+  buf[i++] = 0x1A;  // length: 26 bytes follow
+  buf[i++] = 0xFF;  // AD type: Manufacturer Specific Data
+  buf[i++] = 0x4C; buf[i++] = 0x00;  // Apple company ID (little-endian)
+  buf[i++] = 0x02;  // iBeacon subtype
+  buf[i++] = 0x15;  // subtype length: 21 bytes (uuid + major + minor + power)
+  memcpy(&buf[i], iBeaconUuid, 16); i += 16;
+  buf[i++] = (iBeaconMajor >> 8) & 0xFF; buf[i++] = iBeaconMajor & 0xFF;
+  buf[i++] = (iBeaconMinor >> 8) & 0xFF; buf[i++] = iBeaconMinor & 0xFF;
+  buf[i++] = (uint8_t)iBeaconTxPower;
+  return i;
+}
+
+// device_choice == 2: Eddystone-URL. Advertises a fixed URL as a Google
+// Eddystone "Physical Web" beacon (readable by nearby phones/scanner apps).
+const char* eddystoneUrl = "github.com/VictorNeri/quetzal";
+
+// Builds the two AD structures Eddystone-URL requires: a 16-bit service UUID
+// list (advertises the Eddystone service) followed by the Service Data frame
+// itself. Returns the combined length.
+size_t buildEddystoneUrlAdvData(uint8_t* buf, size_t bufLen) {
+  size_t urlLen = strlen(eddystoneUrl);
+  if (urlLen > 17) urlLen = 17;  // Eddystone-URL payload budget
+  const size_t needed = 4 + 7 + urlLen;
+  if (bufLen < needed) return 0;
+
+  size_t i = 0;
+  buf[i++] = 0x03; buf[i++] = 0x03; buf[i++] = 0xAA; buf[i++] = 0xFE;  // Complete 16-bit UUID list: Eddystone (0xFEAA)
+
+  size_t svcDataStart = i;
+  buf[i++] = 0;                       // length placeholder, filled in below
+  buf[i++] = 0x16;                    // AD type: Service Data - 16-bit UUID
+  buf[i++] = 0xAA; buf[i++] = 0xFE;   // Eddystone UUID (little-endian)
+  buf[i++] = 0x10;                    // Eddystone-URL frame type
+  buf[i++] = (uint8_t)iBeaconTxPower; // calibrated Tx power at 0 m
+  buf[i++] = 0x03;                    // URL scheme prefix: "https://"
+  memcpy(&buf[i], eddystoneUrl, urlLen); i += urlLen;
+  buf[svcDataStart] = (uint8_t)(i - svcDataStart - 1);
+
+  return i;
+}
+
 BLEAdvertisementData getAdvertismentData() {
   BLEAdvertisementData oAdvertisementData = BLEAdvertisementData();
 
   if (device_choice == 0) {
     bleCompatAddRawAdvData(oAdvertisementData, (const uint8_t*)DEVICES[device_index], 31);
+  } else if (device_choice == 1) {
+    uint8_t buf[27];
+    size_t len = buildIBeaconAdvData(buf, sizeof(buf));
+    bleCompatAddRawAdvData(oAdvertisementData, buf, len);
+  } else if (device_choice == 2) {
+    uint8_t buf[31];
+    size_t len = buildEddystoneUrlAdvData(buf, sizeof(buf));
+    bleCompatAddRawAdvData(oAdvertisementData, buf, len);
   }
 
   int adv_type_choice = random(3);
@@ -161,7 +233,7 @@ BLEAdvertisementData getAdvertismentData() {
 }
 
 void Printspoofer(String text, uint16_t color, bool extraSpace = false) {
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
   if (spooferlineIndex >= MAX_LINES - 1) {
     for (int i = 0; i < MAX_LINES - 1; i++) {
       spooferBuffer[i] = spooferBuffer[i + 1];
@@ -176,7 +248,7 @@ void Printspoofer(String text, uint16_t color, bool extraSpace = false) {
 
   if (extraSpace && spooferlineIndex < MAX_LINES) {
     spooferBuffer[spooferlineIndex] = "";
-    colorspooferBuffer[spooferlineIndex] = SHREDDY_TEAL;
+    colorspooferBuffer[spooferlineIndex] = UI_CYAN;
     spooferlineIndex++;
   }
 
@@ -211,7 +283,7 @@ void updateSpoofer() {
   tft.fillRect(60, 310, 150, 16, DARK_GRAY);
 
   tft.setCursor(5, 295);
-  tft.setTextColor(SHREDDY_TEAL, DARK_GRAY);
+  tft.setTextColor(UI_CYAN, DARK_GRAY);
   tft.print("Device:");
   int x = 50;
   int y = 295;
@@ -234,11 +306,13 @@ void updateSpoofer() {
     case 15: tft.setCursor(x, y); tft.print("[ Beats StudioPro ]"); break;
     case 16: tft.setCursor(x, y); tft.print("[ Beats FitPro ]"); break;
     case 17: tft.setCursor(x, y); tft.print("[ Beats BudsPlus ]"); break;
+    case 18: tft.setCursor(x, y); tft.print("[ iBeacon ]"); break;
+    case 19: tft.setCursor(x, y); tft.print("[ Eddystone ]"); break;
     default: tft.setCursor(x, y); tft.print("[ Airpods ]"); break;
   }
 
   tft.setCursor(5, 310);
-  tft.setTextColor(SHREDDY_TEAL, DARK_GRAY);
+  tft.setTextColor(UI_CYAN, DARK_GRAY);
   tft.print("Adv Type:");
 
   switch (advType) {
@@ -359,6 +433,17 @@ void Beats_Studio_Buds_Plus() {
   attack_state = 1;
 }
 
+void IBeacon() {
+  device_choice = 1;
+  attack_state = 1;
+  randomizeIBeacon();
+}
+
+void Eddystone() {
+  device_choice = 2;
+  attack_state = 1;
+}
+
 void setAdvertisingData() {
 
   switch (deviceType) {
@@ -413,6 +498,12 @@ void setAdvertisingData() {
     case 17:
       Beats_Studio_Buds_Plus();
       break;
+    case 18:
+      IBeacon();
+      break;
+    case 19:
+      Eddystone();
+      break;
     default:
       Airpods();
       updateSpoofer();
@@ -441,7 +532,7 @@ void handleButtonPress(int pin, void (*callback)()) {
 
 void changeDeviceTypeNext() {
   deviceType++;
-  if (deviceType > 17) deviceType = 1;
+  if (deviceType > 19) deviceType = 1;
   Serial.println("Device Type Next: " + String(deviceType));
   setAdvertisingData();
   updateSpoofer();
@@ -449,7 +540,7 @@ void changeDeviceTypeNext() {
 
 void changeDeviceTypePrev() {
   deviceType--;
-  if (deviceType < 1) deviceType = 17;
+  if (deviceType < 1) deviceType = 19;
   Serial.println("Device Type Prev: " + String(deviceType));
   setAdvertisingData();
   updateSpoofer();
@@ -500,8 +591,8 @@ void toggleAdvertising() {
       delay(delayMillisecond);
       //pAdvertising->stop();
 
-      Printspoofer("[+] Device Type: " + String(deviceType), SHREDDY_TEAL, false);
-      Printspoofer("[+] Advertising Type: " + String(advType), SHREDDY_TEAL, false);
+      Printspoofer("[+] Device Type: " + String(deviceType), UI_CYAN, false);
+      Printspoofer("[+] Advertising Type: " + String(advType), UI_CYAN, false);
       Printspoofer("[!] Advertising started", TFT_YELLOW, false);
     }
 
@@ -520,16 +611,16 @@ void runUI() {
     bitmap_icon_go_back // Added back icon
   };
 
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
 
   if (!uiDrawn) {
 
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
     tft.fillRect(80, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH, STATUS_BAR_HEIGHT, DARK_GRAY);
 
     for (int i = 0; i < ICON_NUM; i++) {
       if (icons[i] != NULL) {
-        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
       }
     }
     tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
@@ -542,7 +633,7 @@ void runUI() {
 
   if (animationState > 0 && millis() - lastAnimationTime >= 150) {
     if (animationState == 1) {
-      tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+      tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, UI_CYAN);
       animationState = 2;
 
       switch (activeIcon) {
@@ -590,7 +681,7 @@ void runUI() {
 void spooferSetup() {
 
   tft.fillScreen(TFT_BLACK);
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
 
   setupTouchscreen();
 
@@ -599,7 +690,7 @@ void spooferSetup() {
 
   tft.fillRect(0, 20, 240, 16, DARK_GRAY);
   tft.setTextFont(1);
-  tft.setTextColor(SHREDDY_TEAL);
+  tft.setTextColor(UI_CYAN);
   tft.setTextSize(1);
   tft.setCursor(5, 24);
   //tft.print("BLE Spoofer");
@@ -634,12 +725,12 @@ void spooferSetup() {
   pcf.pinMode(BTN_SELECT, INPUT_PULLUP);
 
   uiDrawn = false;
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
 }
 
 void spooferLoop() {
   runUI();
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
   //updateStatusBar();
 
   handleButtonPress(BTN_RIGHT, changeDeviceTypeNext);
@@ -673,9 +764,10 @@ static bool uiDrawn = false;
 #define STATUS_BAR_Y_OFFSET 20
 #define STATUS_BAR_HEIGHT 16
 #define ICON_SIZE 16
-#define ICON_NUM 1
+#undef ICON_NUM
+#define ICON_NUM 3
 
-static int iconX[ICON_NUM] = {10};
+static int iconX[ICON_NUM] = {10, 170, 210};
 static int iconY = STATUS_BAR_Y_OFFSET;
 
 std::string device_uuid = "00003082-0000-1000-9000-00805f9b34fb";
@@ -684,6 +776,16 @@ BLEAdvertising *Advertising;
 
 uint8_t packet[17];
 
+// Nearby Action (Continuity type 0x0F) sub-action bytes. Publicly documented
+// across various Apple Continuity protocol write-ups; each triggers a
+// different iOS/macOS popup (AppleTV setup/pairing, "Join This AppleTV?",
+// HomeKit, etc). -1 = cycle randomly every packet (original behavior).
+const uint8_t actionTypes[] = { 0x27, 0x09, 0x02, 0x1e, 0x2b, 0x2d, 0x2f, 0x01, 0x06, 0x20, 0xc0,
+                                 0x0b, 0x19, 0x1f, 0x23, 0x2a, 0x4e };
+const int numActionTypes = sizeof(actionTypes) / sizeof(actionTypes[0]);
+int actionTypeIndex = -1;  // -1 = random
+
+#undef MAX_LINES
 #define MAX_LINES 30
 String lines[MAX_LINES];
 int currentLine = 0;
@@ -691,26 +793,58 @@ int lineNumber = 1;
 const int lineHeight = 14;
 
 
+// Drawn inside the top icon bar (between the back icon at x=10 and the
+// prev/next icons at x=170/210) rather than lower on screen: updatedisplay()
+// repaints almost the entire screen below y=37 every frame for the scrolling
+// log, which would otherwise erase/flicker this status text.
+void updateActionTypeStatus() {
+  tft.fillRect(40, STATUS_BAR_Y_OFFSET, 120, STATUS_BAR_HEIGHT, DARK_GRAY);
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+  tft.setCursor(42, STATUS_BAR_Y_OFFSET + 4);
+  tft.setTextColor(UI_CYAN, DARK_GRAY);
+  if (actionTypeIndex < 0) {
+    tft.print("Type: RND");
+  } else {
+    tft.print("Type: 0x" + String(actionTypes[actionTypeIndex], HEX));
+  }
+}
+
+void changeActionTypeNext() {
+  actionTypeIndex++;
+  if (actionTypeIndex >= numActionTypes) actionTypeIndex = -1;
+  updateActionTypeStatus();
+}
+
+void changeActionTypePrev() {
+  actionTypeIndex--;
+  if (actionTypeIndex < -1) actionTypeIndex = numActionTypes - 1;
+  updateActionTypeStatus();
+}
+
 void runUI() {
 
   static const unsigned char* icons[ICON_NUM] = {
-    bitmap_icon_go_back // Added back icon
+    bitmap_icon_go_back, // Added back icon
+    bitmap_icon_sort_down_minus,
+    bitmap_icon_sort_up_plus
   };
 
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
 
   if (!uiDrawn) {
 
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
     tft.fillRect(0, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH, STATUS_BAR_HEIGHT, DARK_GRAY);
 
     for (int i = 0; i < ICON_NUM; i++) {
       if (icons[i] != NULL) {
-        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
       }
     }
     tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
     uiDrawn = true;
+    updateActionTypeStatus();
   }
 
   static unsigned long lastAnimationTime = 0;
@@ -719,11 +853,13 @@ void runUI() {
 
   if (animationState > 0 && millis() - lastAnimationTime >= 150) {
     if (animationState == 1) {
-      tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+      tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, UI_CYAN);
       animationState = 2;
 
       switch (activeIcon) {
         case 0: feature_exit_requested = true; break;
+        case 1: changeActionTypePrev(); break;
+        case 2: changeActionTypeNext(); break;
       }
     } else if (animationState == 2) {
       animationState = 0;
@@ -821,8 +957,8 @@ BLEAdvertisementData getOAdvertisementData() {
   packet[i++] = 0x0F;                               // Type
   packet[i++] = 0x05;                               // Length
   packet[i++] = 0xC1;                               // Action Flags
-  const uint8_t types[] = { 0x27, 0x09, 0x02, 0x1e, 0x2b, 0x2d, 0x2f, 0x01, 0x06, 0x20, 0xc0 };
-  packet[i++] = types[rand() % sizeof(types)];      // Action Type
+  int idx = (actionTypeIndex >= 0) ? actionTypeIndex : (rand() % numActionTypes);
+  packet[i++] = actionTypes[idx];                   // Action Type
   esp_fill_random(&packet[i], 3);                   // Authentication Tag
   i += 3;
   packet[i++] = 0x00;                               // ???
@@ -840,7 +976,7 @@ void sourappleSetup() {
   tft.setTextSize(1);
   tft.fillScreen(TFT_BLACK);
 
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
   uiDrawn = false;
 
   setupTouchscreen();
@@ -848,7 +984,7 @@ void sourappleSetup() {
   float currentBatteryVoltage = readBatteryVoltage();
   drawStatusBar(currentBatteryVoltage, false);
 
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
 
   BLEDevice::init("");
   bleCompatSetAllTxPowerMax();
@@ -863,7 +999,7 @@ void sourappleSetup() {
 }
 
 void sourappleLoop() {
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
   runUI();
 
   uint8_t dummy_addr[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -929,8 +1065,10 @@ byte channelGroup1[] = {2, 5, 8, 11};
 byte channelGroup2[] = {26, 29, 32, 35};
 byte channelGroup3[] = {80, 83, 86, 89};
 
+#undef SCREEN_HEIGHT
 #define SCREEN_HEIGHT 300
 #define LINE_HEIGHT 12
+#undef MAX_LINES
 #define MAX_LINES (SCREEN_HEIGHT / LINE_HEIGHT)
 
 String Buffer[MAX_LINES];
@@ -962,7 +1100,7 @@ void Print(String text, uint16_t color, bool extraSpace = false) {
 
   if (extraSpace && Index < MAX_LINES) {
     Buffer[Index] = "";
-    Buffercolor[Index] = SHREDDY_TEAL;
+    Buffercolor[Index] = UI_CYAN;
     Index++;
   }
 
@@ -1012,24 +1150,26 @@ void configureRadio(RF24 &radio, const byte* channels, size_t size) {
 }
 
 void initializeRadiosMultiMode() {
-  // Release GPIO 5 from SD card before radio3 init (pin conflict resolution)
+  // Release GPIO 5 from SD card before radio init (pin conflict resolution)
   cleanupSD();
 
+  // Every other NRF24 feature in this file (Scanner, Analyzer, WLANJammer)
+  // explicitly re-initializes the shared SPI bus with the board's real pins
+  // before touching the radio - this feature didn't. RF24::begin() falls
+  // back to SPI.begin() with no arguments, which uses the framework's
+  // default pins, not this board's wiring (GPIO 6/2/7), so the chip was
+  // never actually found and nothing below ever ran.
+  SPI.begin(BOARD_RADIO_SCK, BOARD_RADIO_MISO, BOARD_RADIO_MOSI, BOARD_NRF24_CSN_1);
+
+  // NM-CYD-C5 has a single RF-HAT slot (board_config.h aliases radio1/2/3's
+  // CE/CSN to the same pins) - only one physical NRF24 exists, so only
+  // radio1 is real hardware; radio2/radio3 would just re-initialize the same
+  // chip a second and third time.
   bool radio1Active = false;
-  bool radio2Active = false;
-  bool radio3Active = false;
 
   if (radio1.begin()) {
     configureRadio(radio1, channelGroup1, sizeof(channelGroup1));
     radio1Active = true;
-  }
-  if (radio2.begin()) {
-    configureRadio(radio2, channelGroup2, sizeof(channelGroup2));
-    radio2Active = true;
-  }
-  if (radio3.begin()) {
-    configureRadio(radio3, channelGroup3, sizeof(channelGroup3));
-    radio3Active = true;
   }
 }
 
@@ -1039,8 +1179,6 @@ void initializeRadios() {
 
   } else {
     radio1.powerDown();
-    radio2.powerDown();
-    radio3.powerDown();
   }
 }
 
@@ -1072,7 +1210,7 @@ void updateTFT() {
   int spacing = 75;
 
   for (int i = 0; i < 3; i++) {
-    tft.drawBitmap(xPos, yPosIcon, buttons[i].icon, 16, 16, SHREDDY_TEAL);
+    tft.drawBitmap(xPos, yPosIcon, buttons[i].icon, 16, 16, UI_CYAN);
 
     tft.setCursor(xPos + 18, yPosIcon + 4);
     tft.print(buttons[i].label);
@@ -1099,7 +1237,7 @@ void checkModeChange() {
 
     String modeText = "[+] Mode changed to: ";
     modeText += (currentMode == BLE_MODULE) ? "BLE" : "Bluetooth";
-    Print(modeText, SHREDDY_TEAL, false);
+    Print(modeText, UI_CYAN, false);
   }
 
   if (jammerToggleRequested) {
@@ -1115,6 +1253,8 @@ void checkModeChange() {
 }
 
 void blejamSetup() {
+  blockFeatureIfMissing(HW_NRF24);
+  if (feature_exit_requested) return;
 
   tft.fillScreen(TFT_BLACK);
   tft.setRotation(0);
@@ -1143,14 +1283,14 @@ void blejamSetup() {
   updateTFT();
 
   Print("===== System Diagnostics =====", TFT_CYAN, false);
-  Print("Initializing TFT display...", SHREDDY_TEAL, false);
+  Print("Initializing TFT display...", UI_CYAN, false);
 
   initializeRadios();
 
-  Print("[*] Disabling Bluetooth & WiFi...", SHREDDY_TEAL, false);
-  Print("[*] Bluetooth & WiFi disabled.", SHREDDY_TEAL, false);
+  Print("[*] Disabling Bluetooth & WiFi...", UI_CYAN, false);
+  Print("[*] Bluetooth & WiFi disabled.", UI_CYAN, false);
 
-  Print("[*] Initializing PCF8574...", SHREDDY_TEAL, false);
+  Print("[*] Initializing PCF8574...", UI_CYAN, false);
 
   pcf.pinMode(BTN_UP, INPUT_PULLUP);
   pcf.pinMode(BTN_DOWN, INPUT_PULLUP);
@@ -1171,15 +1311,11 @@ void blejamLoop() {
       int randomIndex = random(0, sizeof(ble_channels) / sizeof(ble_channels[0]));
       int channel = ble_channels[randomIndex];
       radio1.setChannel(channel);
-      radio2.setChannel(channel);
-      radio3.setChannel(channel);
 
     } else if (currentMode == Bluetooth_MODULE) {
       int randomIndex = random(0, sizeof(bluetooth_channels) / sizeof(bluetooth_channels[0]));
       int channel = bluetooth_channels[randomIndex];
       radio1.setChannel(channel);
-      radio2.setChannel(channel);
-      radio3.setChannel(channel);
     }
   }
 }
@@ -1205,6 +1341,7 @@ namespace BleScan {
 #define STATUS_BAR_Y_OFFSET 20
 #define STATUS_BAR_HEIGHT 16
 #define ICON_SIZE 16
+#undef ICON_NUM
 #define ICON_NUM 2
 
 BLEScan* bleScan = nullptr;
@@ -1231,7 +1368,7 @@ static const unsigned char* icons[ICON_NUM] = {
 
 void displayScanning() {
   tft.fillRect(0, 37, 240, 320, TFT_BLACK);
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setCursor(10, 15 + yshift);
   tft.print("[*] Scanning");
 
@@ -1256,14 +1393,12 @@ void startBLEScan() {
   isScanning = true;
   screenNeedsUpdate = true;
   fullScreenUpdate = true;
-#if BOARD_BLE_STACK_NIMBLE
-  // NimBLE start() takes milliseconds and returns a bool; results are fetched
-  // separately. Bluedroid start() takes seconds and returns the results.
-  bleScan->start(5000, false);
-  bleResults = bleScan->getResults();
-#else
-  bleResults = bleScan->start(5, false);
-#endif
+  // NimBLEScan::start() is fire-and-forget (returns immediately, scan runs in
+  // the background); calling getResults() right after it just returns
+  // whatever's been found in the ~0ms since start() returned, i.e. nothing.
+  // getResults(duration, isContinue) is the blocking variant that actually
+  // starts the scan and waits for it to finish before returning results.
+  bleResults = bleScan->getResults(5000, false);
   isScanning = false;
   screenNeedsUpdate = true;
 }
@@ -1322,7 +1457,7 @@ void updateBLEList() {
   if (fullScreenUpdate) {
     tft.fillRect(0, 37, 240, 320, TFT_BLACK);
     tft.fillRect(35, 20, 105, 16, DARK_GRAY);
-    tft.setTextColor(SHREDDY_TEAL);
+    tft.setTextColor(UI_CYAN);
     tft.setCursor(35, 24);
     tft.print("BLE Devices:");
   }
@@ -1331,7 +1466,7 @@ void updateBLEList() {
   if (deviceCount <= 0) {
     if (fullScreenUpdate) {
       tft.fillRect(0, 20, 140, 16, DARK_GRAY);
-      tft.setTextColor(SHREDDY_TEAL);
+      tft.setTextColor(UI_CYAN);
       tft.setCursor(5, 24);
       tft.print("No Devices Found");
     }
@@ -1345,11 +1480,7 @@ void updateBLEList() {
     int yPos = 15 + i * 18;
     tft.fillRect(0, yPos - 2 + yshift, tft.width(), 18, TFT_BLACK);
 
-#if BOARD_BLE_STACK_NIMBLE
     const BLEAdvertisedDevice& device = *bleResults.getDevice(index);
-#else
-    BLEAdvertisedDevice device = bleResults.getDevice(index);
-#endif
     String deviceName = device.getName().length() > 0 ? device.getName().c_str() : "Unknown Device";
 
     tft.setCursor(10, yPos + yshift);
@@ -1357,7 +1488,7 @@ void updateBLEList() {
       tft.setTextColor(ORANGE, TFT_BLACK);
       tft.print("> " + deviceName);
     } else {
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+      tft.setTextColor(UI_CYAN, TFT_BLACK);
       tft.print("  " + deviceName);
     }
   }
@@ -1366,21 +1497,17 @@ void updateBLEList() {
 void displayBLEDetails() {
   tft.fillRect(0, 37, 240, 320, TFT_BLACK);
   tft.fillRect(35, 20, 105, 16, DARK_GRAY);
-  tft.setTextColor(SHREDDY_TEAL);
+  tft.setTextColor(UI_CYAN);
   tft.setCursor(35, 24);
   tft.print("Device Details:");
 
-#if BOARD_BLE_STACK_NIMBLE
   const BLEAdvertisedDevice& device = *bleResults.getDevice(currentIndex);
-#else
-  BLEAdvertisedDevice device = bleResults.getDevice(currentIndex);
-#endif
   String deviceName = device.getName().length() > 0 ? device.getName().c_str() : "Unknown Device";
   String address = device.getAddress().toString().c_str();
   int rssi = device.getRSSI();
   int txPower = device.getTXPower();
 
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(1);
 
   tft.setCursor(10, 20 + yshift);
@@ -1423,12 +1550,12 @@ void runUI() {
   static int iconY = STATUS_BAR_Y_OFFSET;
 
   if (!uiDrawn) {
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
     tft.fillRect(140, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH - 140, STATUS_BAR_HEIGHT, DARK_GRAY);
 
     for (int i = 0; i < ICON_NUM; i++) {
       if (icons[i] != NULL) {
-        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
       }
     }
     tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
@@ -1441,7 +1568,7 @@ void runUI() {
 
   if (animationState > 0 && millis() - lastAnimationTime >= 150) {
     if (animationState == 1) {
-      tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+      tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, UI_CYAN);
       animationState = 2;
 
       switch (activeIcon) {
@@ -1492,7 +1619,7 @@ void runUI() {
 void bleScanSetup() {
   tft.setRotation(0);
   tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(1);
   tft.fillRect(0, 20, 140, 16, DARK_GRAY);
 
@@ -1517,7 +1644,7 @@ void bleScanSetup() {
 }
 
 void bleScanLoop() {
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
   handleButtons();
 
   updateStatusBar();
@@ -1569,13 +1696,14 @@ static bool uiDrawn = false;
 
 volatile bool scanning = true;
 
+#undef SCREEN_HEIGHT
 #define SCREEN_HEIGHT 180
 #define LINE_HEIGHT 12
+#undef MAX_LINES
 #define MAX_LINES (SCREEN_HEIGHT / LINE_HEIGHT)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SCANNER BAR GRAPH - Clean & Fast - WiFi ONLY (2400-2484 MHz)
-// HaleHound v2.3 - Jesse Hale
 // Focused on WiFi channels 1-13, no ISM noise
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1609,7 +1737,7 @@ uint16_t Buffercolor[MAX_LINES];
 int Index = 0;
 
 bool isSelectButtonPressed() {
-  return pcf.digitalRead(BTN_SELECT) == LOW;  
+  return pcf.digitalRead(BTN_SELECT) == LOW;
 }
 
 byte getRegister(byte r) {
@@ -1679,7 +1807,7 @@ void Print(String text, uint16_t color, bool extraSpace = false) {
 
   if (extraSpace && Index < MAX_LINES) {
     Buffer[Index] = "";
-    Buffercolor[Index] = SHREDDY_TEAL;
+    Buffercolor[Index] = UI_CYAN;
     Index++;
   }
 
@@ -1716,7 +1844,7 @@ void calibrateBackgroundNoise() {
         }
       }
     }
-    Print(".", SHREDDY_TEAL, false);
+    Print(".", UI_CYAN, false);
   }
 
   // Average the samples
@@ -1725,8 +1853,8 @@ void calibrateBackgroundNoise() {
   }
 
   noiseCalibrated = true;
-  Print("[+] Noise floor captured!", SHREDDY_TEAL, false);
-  Print("[+] Ambient RF will be filtered", SHREDDY_TEAL, false);
+  Print("[+] Noise floor captured!", UI_CYAN, false);
+  Print("[+] Ambient RF will be filtered", UI_CYAN, false);
 }
 
 void scan() {
@@ -1745,17 +1873,19 @@ void scan() {
 
 void runUI() {
 #define SCREEN_WIDTH  240
+#undef SCREEN_HEIGHT
 #define SCREEN_HEIGHT 320
 #define STATUS_BAR_Y_OFFSET 20
 #define STATUS_BAR_HEIGHT 16
 #define ICON_SIZE 16
+#undef ICON_NUM
 #define ICON_NUM 3
 
   static int iconX[ICON_NUM] = {170, 210, 10};
   static int iconY = STATUS_BAR_Y_OFFSET;
 
   static const unsigned char* icons[ICON_NUM] = {
-    bitmap_icon_undo,   
+    bitmap_icon_undo,
     bitmap_icon_start,
     bitmap_icon_go_back // Added back icon
   };
@@ -1763,16 +1893,16 @@ void runUI() {
   if (!uiDrawn) {
 
     tft.fillRect(0, 20, 160, 16, DARK_GRAY);
-    tft.setTextColor(SHREDDY_TEAL);
+    tft.setTextColor(UI_CYAN);
     tft.setCursor(35, 24);
     tft.print("2.4GHz Scanner");
 
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
     tft.fillRect(160, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH, STATUS_BAR_HEIGHT, DARK_GRAY);
 
     for (int i = 0; i < ICON_NUM; i++) {
       if (icons[i] != NULL) {
-        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
       }
     }
     tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
@@ -1780,12 +1910,12 @@ void runUI() {
   }
 
   static unsigned long lastAnimationTime = 0;
-  static int animationState = 0;  
+  static int animationState = 0;
   static int activeIcon = -1;
 
   if (animationState > 0 && millis() - lastAnimationTime >= 150) {
     if (animationState == 1) {
-      tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+      tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, UI_CYAN);
       animationState = 2;
 
       switch (activeIcon) {
@@ -1801,7 +1931,7 @@ void runUI() {
   }
 
   static unsigned long lastTouchCheck = 0;
-  const unsigned long touchCheckInterval = 50;  
+  const unsigned long touchCheckInterval = 50;
 
   if (millis() - lastTouchCheck >= touchCheckInterval) {
     if (ts.touched() && feature_active) {
@@ -1870,7 +2000,7 @@ void outputChannels() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 uint16_t getBarColor(int height, int maxHeight) {
-    // HaleHound gradient: Teal (0, 207, 255) at bottom -> Magenta/Pink (255, 28, 82) at top
+    // Teal-to-magenta gradient: Teal (0, 207, 255) at bottom -> Magenta/Pink (255, 28, 82) at top
     float ratio = (float)height / (float)maxHeight;
     if (ratio > 1.0f) ratio = 1.0f;
 
@@ -1890,10 +2020,10 @@ void drawScannerFrame() {
     // Draw static frame elements (only once)
 
     // Y-axis line
-    tft.drawFastVLine(BAR_START_X - 2, BAR_START_Y, BAR_HEIGHT, SHREDDY_TEAL);
+    tft.drawFastVLine(BAR_START_X - 2, BAR_START_Y, BAR_HEIGHT, UI_CYAN);
 
     // X-axis line
-    tft.drawFastHLine(BAR_START_X, BAR_START_Y + BAR_HEIGHT, BAR_WIDTH, SHREDDY_TEAL);
+    tft.drawFastHLine(BAR_START_X, BAR_START_Y + BAR_HEIGHT, BAR_WIDTH, UI_CYAN);
 
     // WiFi channel markers - vertical dashed lines (scaled to SCAN_CHANNELS)
     int x1 = BAR_START_X + (WIFI_CH1_NRF * BAR_WIDTH / SCAN_CHANNELS);
@@ -1922,7 +2052,7 @@ void drawScannerFrame() {
     tft.print("13");
 
     // Frequency labels at bottom - WiFi range only (2400-2484)
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
     tft.setCursor(BAR_START_X - 5, BAR_START_Y + BAR_HEIGHT + 4);
     tft.print("2400");
     tft.setCursor(BAR_START_X + BAR_WIDTH/2 - 12, BAR_START_Y + BAR_HEIGHT + 4);
@@ -2001,14 +2131,14 @@ void drawBarGraph() {
     tft.print(" MHz");
 
     // Signal strength bar
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
     tft.setCursor(10, statusY + 20);
     tft.print("SIG:");
 
     int barX = 40;
     int barW = 150;
     int barH = 12;
-    tft.drawRect(barX, statusY + 18, barW, barH, SHREDDY_TEAL);
+    tft.drawRect(barX, statusY + 18, barW, barH, UI_CYAN);
 
     int fillW = (peakLevel * (barW - 2)) / 4;  // Match bar scaling
     if (fillW > barW - 2) fillW = barW - 2;
@@ -2083,6 +2213,8 @@ void display() {
 }
 
 void scannerSetup() {
+  blockFeatureIfMissing(HW_NRF24);
+  if (feature_exit_requested) return;
 
   tft.setRotation(0);
   tft.fillScreen(TFT_BLACK);
@@ -2170,7 +2302,6 @@ void scannerLoop() {
 
 /*
  * 2.4GHz Spectrum Analyzer - Real-time visualization with WATERFALL
- * HaleHound v2.4 - Jesse Hale
  *
  * WATERFALL DISPLAY: Scrolling history below spectrum bars
  * Same teal-to-magenta gradient as the bars
@@ -2220,6 +2351,7 @@ const int WIFI_CH13 = 72;
 #define GRAPH_Y 50              // Start after header
 #define GRAPH_WIDTH 220
 #define GRAPH_HEIGHT 120        // Reduced to make room for waterfall
+#undef BAR_WIDTH
 #define BAR_WIDTH 1
 
 // NRF24 register definitions (same as Scanner)
@@ -2280,7 +2412,7 @@ void initWaterfallPalette() {
     waterfall_initialized = true;
 }
 
-// HaleHound gradient waterfall
+// Teal-to-magenta gradient waterfall
 // Top (row 0) = Magenta/Pink, Bottom (row max) = Cyan
 // Signal strength adjusts brightness
 uint16_t getGradientWaterfallColor(uint8_t level, int row, int maxRows) {
@@ -2408,12 +2540,12 @@ void drawWiFiMarkers() {
 
 void drawAxes() {
     // Y-axis for spectrum
-    tft.drawLine(GRAPH_X - 2, GRAPH_Y, GRAPH_X - 2, GRAPH_Y + GRAPH_HEIGHT, SHREDDY_TEAL);
+    tft.drawLine(GRAPH_X - 2, GRAPH_Y, GRAPH_X - 2, GRAPH_Y + GRAPH_HEIGHT, UI_CYAN);
     // X-axis for spectrum
-    tft.drawLine(GRAPH_X, GRAPH_Y + GRAPH_HEIGHT, GRAPH_X + GRAPH_WIDTH, GRAPH_Y + GRAPH_HEIGHT, SHREDDY_TEAL);
+    tft.drawLine(GRAPH_X, GRAPH_Y + GRAPH_HEIGHT, GRAPH_X + GRAPH_WIDTH, GRAPH_Y + GRAPH_HEIGHT, UI_CYAN);
 
     // Frequency labels between spectrum and waterfall
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
     tft.setTextSize(1);
     tft.setCursor(GRAPH_X - 5, GRAPH_Y + GRAPH_HEIGHT + 3);
     tft.print("2400");
@@ -2454,7 +2586,7 @@ void drawSpectrum() {
         if (barHeight > GRAPH_HEIGHT) barHeight = GRAPH_HEIGHT;
 
         if (barHeight > 0) {
-            // HaleHound gradient - Teal to Pink
+            // Teal-to-magenta gradient
             for (int y = 0; y < barHeight; y++) {
                 float ratio = (float)y / (float)GRAPH_HEIGHT;
 
@@ -2555,7 +2687,7 @@ void drawStatusArea() {
         }
     }
 
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
     tft.setTextSize(1);
     tft.setCursor(5, 310);
     tft.printf("Peak:%dMHz Lv:%d", 2400 + peakCh, peakVal);
@@ -2571,6 +2703,9 @@ void resetPeaks() {
 }
 
 void analyzerSetup() {
+    blockFeatureIfMissing(HW_NRF24);
+    if (feature_exit_requested) return;
+
     tft.setRotation(0);
     tft.fillScreen(TFT_BLACK);
 
@@ -2818,7 +2953,7 @@ void drawHeader() {
 void drawButtonGuide() {
     tft.fillRect(0, 270, 240, 50, TFT_BLACK);
 
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
     tft.setTextSize(1);
 
     // UP = Toggle jammer
@@ -2869,7 +3004,7 @@ void drawSpectrumBar() {
     tft.fillRect(JAM_GRAPH_X, JAM_GRAPH_Y, JAM_GRAPH_WIDTH, JAM_GRAPH_HEIGHT, TFT_BLACK);
 
     // Draw border
-    tft.drawRect(JAM_GRAPH_X - 1, JAM_GRAPH_Y - 1, JAM_GRAPH_WIDTH + 2, JAM_GRAPH_HEIGHT + 2, SHREDDY_TEAL);
+    tft.drawRect(JAM_GRAPH_X - 1, JAM_GRAPH_Y - 1, JAM_GRAPH_WIDTH + 2, JAM_GRAPH_HEIGHT + 2, UI_CYAN);
 
     if (!jammerActive) {
         tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
@@ -2888,7 +3023,7 @@ void drawSpectrumBar() {
     tft.fillRect(x, JAM_GRAPH_Y + 10, barWidth, JAM_GRAPH_HEIGHT - 20, TFT_RED);
 
     // Show current NRF24 channel
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
     tft.setCursor(JAM_GRAPH_X + JAM_GRAPH_WIDTH/2 - 40, JAM_GRAPH_Y + JAM_GRAPH_HEIGHT + 5);
     tft.printf("NRF24 Ch: %d (%d MHz)", currentNRFChannel, 2400 + currentNRFChannel);
 
@@ -3025,7 +3160,7 @@ void drawSignalBars() {
     // Legend
     tft.setTextSize(1);
     tft.fillRect(JAM_GRAPH_X, legendY, JAM_GRAPH_WIDTH, 10, TFT_BLACK);
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
     tft.setCursor(JAM_GRAPH_X, legendY);
     tft.print("SIGNAL: ");
     tft.setTextColor(TFT_GREEN, TFT_BLACK);
@@ -3186,6 +3321,9 @@ void checkButtons() {
 }
 
 void wlanjammerSetup() {
+    blockFeatureIfMissing(HW_NRF24);
+    if (feature_exit_requested) return;
+
     tft.setRotation(0);
     tft.fillScreen(TFT_BLACK);
 
@@ -3338,8 +3476,8 @@ void wlanjammerLoop() {
 /*
  *
  * ProtoKill
- * 
- * 
+ *
+ *
 */
 
 namespace ProtoKill {
@@ -3380,8 +3518,10 @@ byte channelGroup1[] = {2, 5, 8, 11};
 byte channelGroup2[] = {26, 29, 32, 35};
 byte channelGroup3[] = {80, 83, 86, 89};
 
+#undef SCREEN_HEIGHT
 #define SCREEN_HEIGHT 300
 #define LINE_HEIGHT 12
+#undef MAX_LINES
 #define MAX_LINES (SCREEN_HEIGHT / LINE_HEIGHT)
 
 String Buffer[MAX_LINES];
@@ -3415,7 +3555,7 @@ void Print(String text, uint16_t color, bool extraSpace = false) {
 
   if (extraSpace && Index < MAX_LINES) {
     Buffer[Index] = "";
-    Buffercolor[Index] = SHREDDY_TEAL;
+    Buffercolor[Index] = UI_CYAN;
     Index++;
   }
 
@@ -3465,24 +3605,26 @@ void configureRadio(RF24 &radio, const byte* channels, size_t size) {
 }
 
 void initializeRadiosMultiMode() {
-  // Release GPIO 5 from SD card before radio3 init (pin conflict resolution)
+  // Release GPIO 5 from SD card before radio init (pin conflict resolution)
   cleanupSD();
 
+  // Every other NRF24 feature in this file (Scanner, Analyzer, WLANJammer)
+  // explicitly re-initializes the shared SPI bus with the board's real pins
+  // before touching the radio - this feature didn't. RF24::begin() falls
+  // back to SPI.begin() with no arguments, which uses the framework's
+  // default pins, not this board's wiring (GPIO 6/2/7), so the chip was
+  // never actually found and nothing below ever ran.
+  SPI.begin(BOARD_RADIO_SCK, BOARD_RADIO_MISO, BOARD_RADIO_MOSI, BOARD_NRF24_CSN_1);
+
+  // NM-CYD-C5 has a single RF-HAT slot (board_config.h aliases radio1/2/3's
+  // CE/CSN to the same pins) - only one physical NRF24 exists, so only
+  // radio1 is real hardware; radio2/radio3 would just re-initialize the same
+  // chip a second and third time.
   bool radio1Active = false;
-  bool radio2Active = false;
-  bool radio3Active = false;
 
   if (radio1.begin()) {
     configureRadio(radio1, channelGroup1, sizeof(channelGroup1));
     radio1Active = true;
-  }
-  if (radio2.begin()) {
-    configureRadio(radio2, channelGroup2, sizeof(channelGroup2));
-    radio2Active = true;
-  }
-  if (radio3.begin()) {
-    configureRadio(radio3, channelGroup3, sizeof(channelGroup3));
-    radio3Active = true;
   }
 }
 
@@ -3492,8 +3634,6 @@ void initializeRadios() {
 
   } else {
     radio1.powerDown();
-    radio2.powerDown();
-    radio3.powerDown();
   }
 }
 
@@ -3525,7 +3665,7 @@ void updateTFT() {
   int spacing = 75;
 
   for (int i = 0; i < 3; i++) {
-    tft.drawBitmap(xPos, yPosIcon, buttons[i].icon, 16, 16, SHREDDY_TEAL);
+    tft.drawBitmap(xPos, yPosIcon, buttons[i].icon, 16, 16, UI_CYAN);
 
     tft.setCursor(xPos + 18, yPosIcon + 4);
     tft.print(buttons[i].label);
@@ -3539,7 +3679,7 @@ void updateTFT() {
   }
 
   tft.drawRoundRect(0, 19, 240, 16, 4, LIGHT_GRAY);
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
 
   /*
   tft.setCursor(5, 7);
@@ -3555,7 +3695,7 @@ void updateTFT() {
             );
 
   tft.setCursor(100, 7);
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.print("Jammer: ");
   tft.setTextColor(jammerActive ? TFT_RED : TFT_GREEN);
   tft.printf(jammerActive ? "ON" : "OFF");
@@ -3575,7 +3715,7 @@ void printModeChange(OperationMode mode) {
     case NRF24_MODULE:        modeText += "NRF24";     break;
     default: modeText                  += "Unknown";   break;
   }
-  Print(modeText, SHREDDY_TEAL, false);
+  Print(modeText, UI_CYAN, false);
 }
 
 void printJammerStatus(bool active) {
@@ -3614,23 +3754,25 @@ void checkModeChange() {
 
 
 void prokillSetup() {
+  blockFeatureIfMissing(HW_NRF24);
+  if (feature_exit_requested) return;
 
   tft.fillScreen(TFT_BLACK);
   tft.setRotation(0);
-  
+
   float currentBatteryVoltage = readBatteryVoltage();
   drawStatusBar(currentBatteryVoltage, false);
   updateTFT();
 
   Print("===== System Diagnostics =====", TFT_CYAN, false);
-  Print("Initializing TFT display...", SHREDDY_TEAL, false);
+  Print("Initializing TFT display...", UI_CYAN, false);
 
   initializeRadios();
 
-  Print("[*] Disabling Bluetooth & WiFi...", SHREDDY_TEAL, false);
-  Print("[*] Bluetooth & WiFi disabled.", SHREDDY_TEAL, false);
+  Print("[*] Disabling Bluetooth & WiFi...", UI_CYAN, false);
+  Print("[*] Bluetooth & WiFi disabled.", UI_CYAN, false);
 
-  Print("[*] Initializing PCF8574...", SHREDDY_TEAL, false);
+  Print("[*] Initializing PCF8574...", UI_CYAN, false);
 
   pcf.pinMode(BTN_UP, INPUT_PULLUP);
   pcf.pinMode(BTN_DOWN, INPUT_PULLUP);
@@ -3650,1126 +3792,42 @@ void prokillLoop() {
       int randomIndex = random(0, sizeof(ble_channels) / sizeof(ble_channels[0]));
       int channel = ble_channels[randomIndex];
       radio1.setChannel(channel);
-      radio2.setChannel(channel);
-      radio3.setChannel(channel);
 
     } else if (currentMode == Bluetooth_MODULE) {
       int randomIndex = random(0, sizeof(bluetooth_channels) / sizeof(bluetooth_channels[0]));
       int channel = bluetooth_channels[randomIndex];
       radio1.setChannel(channel);
-      radio2.setChannel(channel);
-      radio3.setChannel(channel);
 
     } else if (currentMode == WiFi_MODULE) {
       int randomIndex = random(0, sizeof(WiFi_channels) / sizeof(WiFi_channels[0]));
       int channel = WiFi_channels[randomIndex];
       radio1.setChannel(channel);
-      radio2.setChannel(channel);
-      radio3.setChannel(channel);
 
     } else if (currentMode == USB_WIRELESS_MODULE) {
       int randomIndex = random(0, sizeof(usbWireless_channels) / sizeof(usbWireless_channels[0]));
       int channel = usbWireless_channels[randomIndex];
       radio1.setChannel(channel);
-      radio2.setChannel(channel);
-      radio3.setChannel(channel);
 
     } else if (currentMode == VIDEO_TX_MODULE) {
       int randomIndex = random(0, sizeof(videoTransmitter_channels) / sizeof(videoTransmitter_channels[0]));
       int channel = videoTransmitter_channels[randomIndex];
       radio1.setChannel(channel);
-      radio2.setChannel(channel);
-      radio3.setChannel(channel);
 
     } else if (currentMode == RC_MODULE) {
       int randomIndex = random(0, sizeof(rc_channels) / sizeof(rc_channels[0]));
       int channel = rc_channels[randomIndex];
       radio1.setChannel(channel);
-      radio2.setChannel(channel);
-      radio3.setChannel(channel);
 
     } else if (currentMode == ZIGBEE_MODULE) {
       int randomIndex = random(0, sizeof(zigbee_channels) / sizeof(zigbee_channels[0]));
       int channel = zigbee_channels[randomIndex];
       radio1.setChannel(channel);
-      radio2.setChannel(channel);
-      radio3.setChannel(channel);
 
     } else if (currentMode == NRF24_MODULE) {
       int randomIndex = random(0, sizeof(nrf24_channels) / sizeof(nrf24_channels[0]));
       int channel = nrf24_channels[randomIndex];
       radio1.setChannel(channel);
-      radio2.setChannel(channel);
-      radio3.setChannel(channel);
       }
     }
   }
 }
-
-
-/*
- * 
- * BLE Sniffer
- * 
- * 
-*/
-
-namespace BleSniffer {
-
-// This module combines BLE and Bluetooth Classic (BR/EDR) discovery. The
-// ESP32-C5 has no BR/EDR radio and no Bluedroid host, so the whole feature is
-// compiled out there and replaced with a stub (see the #else branch below).
-#if BOARD_HAS_BT_CLASSIC
-
-#define SCREEN_WIDTH  240
-#define SCREENHEIGHT 320
-#define STATUS_BAR_Y_OFFSET 20
-#define STATUS_BAR_HEIGHT 16
-#define ICON_SIZE 16
-#define ICON_NUM 3
-
-static bool uiDrawn = false;
-
-static int iconX[ICON_NUM] = {170, 210, 10};
-static const unsigned char* icons[ICON_NUM] = {
-  bitmap_icon_undo,
-  bitmap_icon_eye2,
-  bitmap_icon_go_back // Added back icon
-};  
-
-#define HEADER_HEIGHT 20
-#define STATUS_DOT_SIZE 8
-#define LINE_HEIGHT 16
-#define MAX_LINES 16
-#define MAX_DEVICES 64  // Increased from 32
-#define SCAN_INTERVAL 5000
-#define MAX_LINE_LENGTH 38
-#define BEACON_PREFIX "4c000215"
-#define ALERT_FLASH_DURATION 1000
-#define SEPARATOR_THICKNESS 1
-#define SEPARATOR_MARGIN 5
-#define Y_OFFSET 37
-
-struct Config {
-  static constexpr int tftRotation = 0;
-  static constexpr int serialBaud = 115200;
-  static constexpr int bleScanDuration = 5;
-  static constexpr int btScanDuration = 5;
-  static constexpr int maxPacketCount = 20;
-  static constexpr int minRssiThreshold = -20;
-  static constexpr int maxNewDevices = 100;  // Increased - 20 was too sensitive
-  static constexpr int maxMfgDataLength = 31;
-  static constexpr unsigned long deviceTimeout = 30000;
-  static constexpr int maxRandomizedMacChanges = 50;  // Increased - randomized MACs are NORMAL (privacy feature)
-};
-
-enum class MessageType {
-  DEVICE,
-  ALERT,
-  STATUS
-};
-
-// Button definitions for PCF8574
-#define BTN_UP     BOARD_BUTTON_UP
-#define BTN_DOWN   BOARD_BUTTON_DOWN
-#define BTN_LEFT   BOARD_BUTTON_LEFT
-#define BTN_RIGHT  BOARD_BUTTON_RIGHT
-
-struct DeviceInfo {
-  String mac;
-  int rssi = 0;
-  int packetCount = 0;
-  bool isSuspicious = false;
-  String deviceName;
-  String serviceUUID;
-  String beaconUUID;
-  unsigned long firstSeen = 0;  // When device was first detected
-  unsigned long lastSeen = 0;   // When device was last seen
-  bool display = true;
-  bool jammingAlerted = false;
-  bool isBLE = true;
-  int macChangeCount = 0;
-};
-
-struct DisplayLine {
-  String text;
-  uint16_t color = GREEN;
-  uint16_t originalColor = GREEN;
-  bool isAlert = false;
-  unsigned long flashUntil = 0;
-  MessageType type = MessageType::DEVICE;
-};
-
-enum class ViewMode {
-  LOG_VIEW,      // Original scrolling log
-  LIST_VIEW,     // Selectable device list
-  DETAIL_VIEW    // Single device details
-};
-
-class BluetoothSniffer {
-private:
-  // Uses global tft from extern declaration (no local instance)
-  DeviceInfo devices[MAX_DEVICES];
-  DisplayLine displayLines[MAX_LINES];
-  int deviceCount = 0;
-  int lineNumber = 1;
-  int suspiciousCount = 0;
-  int newDevicesThisScan = 0;
-  int lastDeviceCount = -1;
-  int lastSuspiciousCount = -1;
-  bool scanning = true;
-  bool isBLEScanActive = true;
-  unsigned long lastScanTime = 0;
-  unsigned long lastFlashToggle = 0;
-  bool flashState = false;
-  BLEScan* pBLEScan = nullptr;
-  BLEAdvertisedDeviceCallbacks* pDeviceCallbacks = nullptr;  // Store for cleanup
-  static BluetoothSniffer* snifferInstance;
-
-  // Device selection state
-  ViewMode currentView = ViewMode::LIST_VIEW;  // Start in list view
-  int selectedDeviceIndex = -1;
-  int listScrollOffset = 0;
-  int highlightedRow = 0;
-  static constexpr int VISIBLE_ROWS = 12;  // How many devices fit on screen
-  unsigned long lastListUpdate = 0;
-
-  void initDisplay() {
-    uiDrawn = false;
-
-    float currentBatteryVoltage = readBatteryVoltage();
-    drawStatusBar(currentBatteryVoltage, false);
-    runUI();
-  
-    setupTouchscreen();
-    tft.fillRect(0, 37, 240, 320, TFT_BLACK);
-    tft.setTextSize(1);
-    updateHeader();
-    //addLine("Bluetooth Sniffer Started T:" + String(millis()), DARK_GRAY, true, MessageType::STATUS);
-  }
-
-  void updateHeader() {
-    tft.fillRect(0, Y_OFFSET, tft.width(), HEADER_HEIGHT, DARK_GRAY);
-    tft.setTextColor(WHITE, DARK_GRAY);
-    tft.setCursor(5, Y_OFFSET + 6);
-    String status = isBLEScanActive ? "BLE Scanning" : "BT Scanning";
-    tft.print(status + " | Dev: " + String(deviceCount) + " Sus: " + String(suspiciousCount));
-    uint16_t dotColor = isBLEScanActive ? BLUE : GREEN;
-    tft.fillCircle(tft.width() - 10, 46, STATUS_DOT_SIZE / 2, dotColor);
-    tft.drawLine(0, 56, 240, 56, ORANGE);
-  }
-
-  void updateDisplay() {
-    unsigned long now = millis();
-    if (now - lastFlashToggle >= 500) {
-      flashState = !flashState;
-      lastFlashToggle = now;
-    }
-    tft.fillRect(0, Y_OFFSET + HEADER_HEIGHT, tft.width(), tft.height() - HEADER_HEIGHT, TFT_BLACK);
-    for (int i = 0; i < MAX_LINES; i++) {
-      if (displayLines[i].text.isEmpty()) continue;
-      int y = Y_OFFSET + HEADER_HEIGHT + (i * LINE_HEIGHT);
-      uint16_t textColor = displayLines[i].originalColor;
-      if (displayLines[i].isAlert && displayLines[i].flashUntil > now) {
-        textColor = flashState ? displayLines[i].originalColor : TFT_BLACK;
-      }
-      tft.setTextColor(textColor, TFT_BLACK);
-      tft.setCursor(5, y + 2);
-      tft.print(displayLines[i].text);
-      if (displayLines[i].originalColor == ORANGE && !displayLines[i].isAlert) {
-        tft.drawRect(3, y, tft.width() - 6, LINE_HEIGHT - 2, ORANGE);
-      }
-      if (i < MAX_LINES - 1 && !displayLines[i + 1].text.isEmpty() &&
-          displayLines[i].type != displayLines[i + 1].type) {
-        int separatorY = y + LINE_HEIGHT - 1;
-        tft.drawFastHLine(SEPARATOR_MARGIN, separatorY, tft.width() - 2 * SEPARATOR_MARGIN, DARK_GRAY);
-      }
-    }
-    if (deviceCount != lastDeviceCount || suspiciousCount != lastSuspiciousCount) {
-      updateHeader();
-      lastDeviceCount = deviceCount;
-      lastSuspiciousCount = suspiciousCount;
-    }
-    if (deviceCount == 0 && lineNumber == 1) {
-      tft.setTextColor(GREEN, TFT_BLACK);
-      tft.setCursor(5, Y_OFFSET + HEADER_HEIGHT + 10);
-      //tft.print("No Devices Detected");
-    }
-  }
-
-  // ========== DEVICE LIST VIEW ==========
-  void drawListView() {
-    int startY = Y_OFFSET + HEADER_HEIGHT + 5;
-    int rowHeight = 18;
-
-    // Clear list area
-    tft.fillRect(0, startY, 240, 320 - startY, TFT_BLACK);
-
-    if (deviceCount == 0) {
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-      tft.setCursor(60, startY + 50);
-      tft.print("Scanning...");
-      return;
-    }
-
-    // Draw visible devices
-    int visibleCount = min(VISIBLE_ROWS, deviceCount - listScrollOffset);
-    for (int i = 0; i < visibleCount; i++) {
-      int deviceIdx = i + listScrollOffset;
-      if (deviceIdx >= deviceCount) break;
-
-      auto& dev = devices[deviceIdx];
-      int y = startY + (i * rowHeight);
-
-      // Highlight selected row
-      if (i == highlightedRow) {
-        tft.fillRect(0, y, 240, rowHeight, SHREDDY_GUNMETAL);
-        tft.drawRect(0, y, 240, rowHeight, SHREDDY_PINK);
-      }
-
-      // Device type indicator
-      uint16_t typeColor = dev.isBLE ? SHREDDY_BLUE : SHREDDY_GREEN;
-      tft.fillCircle(8, y + 9, 4, typeColor);
-
-      // Suspicious indicator
-      if (dev.isSuspicious) {
-        tft.fillCircle(220, y + 9, 4, SHREDDY_PINK);
-      }
-
-      // MAC address (shortened)
-      tft.setTextColor(i == highlightedRow ? SHREDDY_PINK : SHREDDY_TEAL, TFT_BLACK);
-      tft.setCursor(18, y + 4);
-      String macShort = dev.mac.substring(0, 8) + "..." + dev.mac.substring(15);
-      tft.print(macShort);
-
-      // RSSI
-      tft.setTextColor(GRAY, TFT_BLACK);
-      tft.setCursor(150, y + 4);
-      tft.print(String(dev.rssi) + "dB");
-
-      // Name (if exists)
-      if (!dev.deviceName.isEmpty()) {
-        tft.setTextColor(SHREDDY_GREEN, TFT_BLACK);
-        tft.setCursor(190, y + 4);
-        tft.print(dev.deviceName.substring(0, 4));
-      }
-    }
-
-    // Scroll indicators
-    if (listScrollOffset > 0) {
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-      tft.setCursor(115, startY - 3);
-      tft.print("^");
-    }
-    if (listScrollOffset + VISIBLE_ROWS < deviceCount) {
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-      tft.setCursor(115, startY + (VISIBLE_ROWS * rowHeight) + 2);
-      tft.print("v");
-    }
-
-    // Bottom instruction
-    tft.setTextColor(GRAY, TFT_BLACK);
-    tft.setCursor(5, 300);
-    tft.print("TAP:Select  UP/DN:Scroll  SEL:Back");
-  }
-
-  // ========== DEVICE DETAIL VIEW ==========
-  void drawDetailView() {
-    if (selectedDeviceIndex < 0 || selectedDeviceIndex >= deviceCount) {
-      currentView = ViewMode::LIST_VIEW;
-      return;
-    }
-
-    auto& dev = devices[selectedDeviceIndex];
-    int startY = Y_OFFSET + HEADER_HEIGHT + 5;
-
-    // Clear area
-    tft.fillRect(0, startY, 240, 320 - startY, TFT_BLACK);
-
-    // Title bar
-    tft.fillRect(0, startY, 240, 20, SHREDDY_GUNMETAL);
-    tft.setTextColor(SHREDDY_PINK, SHREDDY_GUNMETAL);
-    tft.setCursor(5, startY + 4);
-    tft.print(dev.isBLE ? "BLE DEVICE" : "BT CLASSIC");
-    if (dev.isSuspicious) {
-      tft.setTextColor(SHREDDY_PINK, SHREDDY_GUNMETAL);
-      tft.setCursor(180, startY + 4);
-      tft.print("[SUS]");
-    }
-
-    int y = startY + 28;
-    int lineH = 18;
-
-    // MAC Address (full)
-    tft.setTextColor(GRAY, TFT_BLACK);
-    tft.setCursor(5, y);
-    tft.print("MAC:");
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-    tft.setCursor(45, y);
-    tft.print(dev.mac);
-    y += lineH;
-
-    // RSSI
-    tft.setTextColor(GRAY, TFT_BLACK);
-    tft.setCursor(5, y);
-    tft.print("RSSI:");
-    tft.setTextColor(SHREDDY_GREEN, TFT_BLACK);
-    tft.setCursor(50, y);
-    tft.print(String(dev.rssi) + " dBm");
-
-    // Signal strength bar
-    int barWidth = map(constrain(dev.rssi, -100, -30), -100, -30, 0, 100);
-    tft.drawRect(120, y, 102, 12, GRAY);
-    if (barWidth > 0) {
-      uint16_t barColor = dev.rssi > -50 ? SHREDDY_GREEN : (dev.rssi > -70 ? SHREDDY_TEAL : SHREDDY_PINK);
-      tft.fillRect(121, y + 1, barWidth, 10, barColor);
-    }
-    y += lineH;
-
-    // Device Name
-    tft.setTextColor(GRAY, TFT_BLACK);
-    tft.setCursor(5, y);
-    tft.print("Name:");
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-    tft.setCursor(50, y);
-    tft.print(dev.deviceName.isEmpty() ? "(none)" : dev.deviceName.substring(0, 20));
-    y += lineH;
-
-    // Service UUID (BLE only)
-    if (dev.isBLE) {
-      tft.setTextColor(GRAY, TFT_BLACK);
-      tft.setCursor(5, y);
-      tft.print("UUID:");
-      tft.setTextColor(SHREDDY_BLUE, TFT_BLACK);
-      tft.setCursor(50, y);
-      tft.print(dev.serviceUUID.isEmpty() ? "(none)" : dev.serviceUUID.substring(0, 20));
-      y += lineH;
-    }
-
-    // Packet count
-    tft.setTextColor(GRAY, TFT_BLACK);
-    tft.setCursor(5, y);
-    tft.print("Packets:");
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-    tft.setCursor(70, y);
-    tft.print(String(dev.packetCount));
-    y += lineH;
-
-    // First seen / Last seen
-    tft.setTextColor(GRAY, TFT_BLACK);
-    tft.setCursor(5, y);
-    tft.print("First:");
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-    tft.setCursor(50, y);
-    tft.print(String((millis() - dev.firstSeen) / 1000) + "s ago");
-    y += lineH;
-
-    tft.setTextColor(GRAY, TFT_BLACK);
-    tft.setCursor(5, y);
-    tft.print("Last:");
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-    tft.setCursor(50, y);
-    tft.print(String((millis() - dev.lastSeen) / 1000) + "s ago");
-    y += lineH + 10;
-
-    // MAC type
-    tft.setTextColor(GRAY, TFT_BLACK);
-    tft.setCursor(5, y);
-    tft.print("MAC Type:");
-    tft.setTextColor(isRandomizedMac(dev.mac) ? SHREDDY_PINK : SHREDDY_GREEN, TFT_BLACK);
-    tft.setCursor(80, y);
-    tft.print(isRandomizedMac(dev.mac) ? "Randomized" : "Static");
-    y += lineH + 15;
-
-    // Action buttons hint
-    tft.drawRect(5, y, 110, 25, SHREDDY_TEAL);
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-    tft.setCursor(15, y + 7);
-    tft.print("COPY MAC");
-
-    tft.drawRect(125, y, 110, 25, SHREDDY_PINK);
-    tft.setTextColor(SHREDDY_PINK, TFT_BLACK);
-    tft.setCursor(145, y + 7);
-    tft.print("TRACK");
-
-    // Bottom instruction
-    tft.setTextColor(GRAY, TFT_BLACK);
-    tft.setCursor(40, 300);
-    tft.print("TAP buttons or SEL:Back");
-  }
-
-  void addLine(String text, uint16_t color, bool isAlert = false, MessageType type = MessageType::DEVICE) {
-    if (text.length() > MAX_LINE_LENGTH) {
-      text = text.substring(0, MAX_LINE_LENGTH - 3) + "...";
-    }
-    for (int i = MAX_LINES - 1; i > 0; i--) {
-      displayLines[i] = displayLines[i - 1];
-    }
-    displayLines[0].text = text;
-    displayLines[0].color = color;
-    displayLines[0].originalColor = (type == MessageType::STATUS) ? DARK_GRAY : color;
-    displayLines[0].isAlert = isAlert;
-    displayLines[0].flashUntil = isAlert ? millis() + ALERT_FLASH_DURATION : 0;
-    displayLines[0].type = type;
-    updateDisplay();
-  }
-
-  void checkSuspiciousActivity(int idx, unsigned long timestamp) {
-    auto& device = devices[idx];
-    if (device.packetCount > Config::maxPacketCount || (device.isBLE && device.rssi > Config::minRssiThreshold)) {
-      if (!device.isSuspicious) {
-        device.isSuspicious = true;
-        suspiciousCount++;
-        if (device.display && !device.jammingAlerted) {
-          String protocol = device.isBLE ? "BLE" : "BT";
-          addLine(String(lineNumber++) + " -> Jamming Suspected (" + protocol + "): " + device.mac + " T:" + String(timestamp),
-                  ORANGE, true, MessageType::ALERT);
-          device.jammingAlerted = true;
-        }
-      }
-    }
-    if (device.isBLE && isRandomizedMac(device.mac) && device.macChangeCount > Config::maxRandomizedMacChanges) {
-      device.isSuspicious = true;
-      suspiciousCount++;
-      if (device.display) {
-        addLine(String(lineNumber++) + " -> MAC Spoofing Suspected (BLE): " + device.mac + " T:" + String(timestamp),
-                ORANGE, true, MessageType::ALERT);
-      }
-    }
-  }
-
-  bool isRandomizedMac(const String& mac) {
-    String firstByte = mac.substring(0, 2);
-    char* end;
-    long value = strtol(firstByte.c_str(), &end, 16);
-    return (value & 0xC0) == 0xC0;
-  }
-
-  void processNewDevice(BLEAdvertisedDevice* bleDevice, esp_bt_gap_cb_param_t* btDevice, unsigned long timestamp, bool isBLE) {
-    // Guard: Don't add devices if scanning is disabled (during reset/cleanup)
-    if (!scanning) return;
-
-    if (deviceCount >= MAX_DEVICES) {
-      addLine("Max devices reached!", RED, true, MessageType::ALERT);
-      return;
-    }
-    newDevicesThisScan++;
-    auto& device = devices[deviceCount];
-    device.isBLE = isBLE;
-    if (isBLE) {
-      device.mac = bleDevice->getAddress().toString().c_str();
-      device.rssi = bleDevice->getRSSI();
-      device.deviceName = bleDevice->getName().c_str();
-      device.serviceUUID = bleDevice->getServiceUUID().toString().c_str();
-      String mfgData = bleDevice->getManufacturerData().c_str();
-      checkBeaconSpoofing(device, mfgData, timestamp);
-      checkMalformedPacket(device, mfgData, timestamp);
-    } else {
-      char macStr[18];
-      snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
-               btDevice->disc_res.bda[0], btDevice->disc_res.bda[1], btDevice->disc_res.bda[2],
-               btDevice->disc_res.bda[3], btDevice->disc_res.bda[4], btDevice->disc_res.bda[5]);
-      device.mac = macStr;
-      device.rssi = 0;
-    }
-    device.packetCount = 1;
-    device.firstSeen = timestamp;  // Record when first detected
-    device.lastSeen = timestamp;
-    device.display = true;
-    checkMacSpoofing(device, timestamp);
-    checkSuspiciousActivity(deviceCount, timestamp);
-    if (device.display) {
-      String protocol = isBLE ? "BLE" : "BT";
-      String line = String(lineNumber++) + " -> " + device.mac + " (" + String(device.rssi) + " dBm, " + protocol + ")";
-      if (isBLE && !device.deviceName.isEmpty()) line += " N:" + device.deviceName.substring(0, 6);
-      if (isBLE && !device.serviceUUID.isEmpty()) line += " U:" + device.serviceUUID.substring(0, 8);
-      line += " T:" + String(timestamp).substring(0, 6);
-      addLine(line, device.isSuspicious ? ORANGE : GREEN, false, MessageType::DEVICE);
-    }
-    deviceCount++;
-    if (newDevicesThisScan > Config::maxNewDevices && device.display) {
-      String protocol = isBLE ? "BLE" : "BT";
-      addLine(String(lineNumber++) + " -> Flooding Detected (" + protocol + ") T:" + String(timestamp),
-              ORANGE, true, MessageType::ALERT);
-    }
-  }
-
-  void checkBeaconSpoofing(DeviceInfo& device, const String& mfgData, unsigned long timestamp) {
-    if (!device.isBLE || !mfgData.startsWith(BEACON_PREFIX)) return;
-    device.beaconUUID = mfgData.substring(4, 36);
-    for (int i = 0; i < deviceCount; i++) {
-      if (devices[i].beaconUUID == device.beaconUUID && devices[i].mac != device.mac) {
-        devices[i].isSuspicious = true;
-        device.isSuspicious = true;
-        suspiciousCount++;
-        if (device.display) {
-          addLine(String(lineNumber++) + " -> Beacon Spoofing (BLE): " + device.mac + " T:" + String(timestamp),
-                  ORANGE, true, MessageType::ALERT);
-        }
-      }
-    }
-  }
-
-  void checkMalformedPacket(DeviceInfo& device, const String& mfgData, unsigned long timestamp) {
-    if (!device.isBLE || mfgData.length() <= Config::maxMfgDataLength) return;
-    device.isSuspicious = true;
-    suspiciousCount++;
-    if (device.display) {
-      addLine(String(lineNumber++) + " -> Malformed Packet (BLE): " + device.mac + " T:" + String(timestamp),
-              ORANGE, true, MessageType::ALERT);
-    }
-  }
-
-  void checkMacSpoofing(DeviceInfo& device, unsigned long timestamp) {
-    // Only flag as spoofing if same MAC has DIFFERENT characteristics
-    // (not just seeing the same device again - that's normal!)
-    for (int i = 0; i < deviceCount; i++) {
-      if (devices[i].mac == device.mac && i != deviceCount) {
-        // Check if characteristics changed suspiciously
-        bool nameChanged = !devices[i].deviceName.isEmpty() &&
-                           !device.deviceName.isEmpty() &&
-                           devices[i].deviceName != device.deviceName;
-        bool protocolMismatch = devices[i].isBLE != device.isBLE;  // Same MAC on BLE and BT Classic
-
-        if (nameChanged || protocolMismatch) {
-          devices[i].isSuspicious = true;
-          device.isSuspicious = true;
-          suspiciousCount++;
-          if (device.display) {
-            String protocol = device.isBLE ? "BLE" : "BT";
-            String reason = nameChanged ? "Name Changed" : "Protocol Mismatch";
-            addLine(String(lineNumber++) + " -> Spoofing (" + reason + "): " + device.mac,
-                    ORANGE, true, MessageType::ALERT);
-          }
-        }
-        return;  // Already exists, just update lastSeen
-      }
-    }
-  }
-
-  void cleanupDevices(unsigned long timestamp) {
-    for (int i = 0; i < deviceCount; ) {
-      if (timestamp - devices[i].lastSeen > Config::deviceTimeout) {
-        if (devices[i].isSuspicious) suspiciousCount--;
-        for (int j = i; j < deviceCount - 1; j++) {
-          devices[j] = devices[j + 1];
-        }
-        deviceCount--;
-      } else {
-        i++;
-      }
-    }
-  }
-
-  void filterByMac(const String& filterMac) {
-    for (int i = 0; i < deviceCount; i++) {
-      devices[i].display = (devices[i].mac == filterMac);
-    }
-    refreshDisplay();
-  }
-
-  void filterSuspicious() {
-    for (int i = 0; i < deviceCount; i++) {
-      devices[i].display = devices[i].isSuspicious;
-    }
-    refreshDisplay();
-  }
-
-  void refreshDisplay() {
-    for (int i = 0; i < MAX_LINES; i++) {
-      displayLines[i].text = "";
-      displayLines[i].color = GREEN;
-      displayLines[i].originalColor = GREEN;
-      displayLines[i].isAlert = false;
-      displayLines[i].flashUntil = 0;
-      displayLines[i].type = MessageType::DEVICE;
-    }
-    lineNumber = 1;
-    tft.fillRect(0, Y_OFFSET + HEADER_HEIGHT, tft.width(), tft.height() - HEADER_HEIGHT, TFT_BLACK);
-    for (int i = 0; i < deviceCount; i++) {
-      if (devices[i].display) {
-        String protocol = devices[i].isBLE ? "BLE" : "BT";
-        String line = String(lineNumber++) + " -> " + devices[i].mac + " (" + String(devices[i].rssi) + " dBm, " + protocol + ")";
-        if (devices[i].isBLE && !devices[i].deviceName.isEmpty()) line += " N:" + devices[i].deviceName.substring(0, 6);
-        if (devices[i].isBLE && !devices[i].serviceUUID.isEmpty()) line += " U:" + devices[i].serviceUUID.substring(0, 8);
-        line += " T:" + String(devices[i].lastSeen).substring(0, 6);
-        addLine(line, devices[i].isSuspicious ? ORANGE : GREEN, false, MessageType::DEVICE);
-      }
-    }
-  }
-
-void runUI() {
-
-  static int iconY = STATUS_BAR_Y_OFFSET;
-
-  if (!uiDrawn) {
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
-    tft.drawLine(0, 36, 240, 36, ORANGE);
-    tft.fillRect(0, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH, STATUS_BAR_HEIGHT, DARK_GRAY);
-
-    for (int i = 0; i < ICON_NUM; i++) {
-      if (icons[i] != NULL) {
-        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
-      }
-    }
-    tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SHREDDY_TEAL);
-    uiDrawn = true;
-  }
-
-  static unsigned long lastAnimationTime = 0;
-  static int animationState = 0;
-  static int activeIcon = -1;
-
-  if (animationState > 0 && millis() - lastAnimationTime >= 150) {
-    if (animationState == 1) {
-      tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
-      animationState = 2;
-
-      switch (activeIcon) {
-        case 0:
-            deviceCount = 0;
-            suspiciousCount = 0;
-            lastDeviceCount = -1;
-            lastSuspiciousCount = -1;
-            lineNumber = 1;
-            for (int i = 0; i < MAX_LINES; i++) {
-              displayLines[i].text = "";
-              displayLines[i].color = GREEN;
-              displayLines[i].originalColor = GREEN;
-              displayLines[i].isAlert = false;
-              displayLines[i].flashUntil = 0;
-              displayLines[i].type = MessageType::DEVICE;
-            }
-            refreshDisplay();
-            addLine("Device list reset", DARK_GRAY, true, MessageType::STATUS);
-          break;
-        case 1: 
-           filterSuspicious();
-          break;
-        case 2: // Back icon action (exit to submenu)
-           feature_exit_requested = true;
-          break;
-      }
-    } else if (animationState == 2) {
-      animationState = 0;
-      activeIcon = -1;
-    }
-    lastAnimationTime = millis();
-  }
-
-  static unsigned long lastTouchCheck = 0;
-  const unsigned long touchCheckInterval = 50;
-
-  if (millis() - lastTouchCheck >= touchCheckInterval) {
-    if (ts.touched() && feature_active) {
-      TS_Point p = ts.getPoint();
-      int x = ::map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
-      int y = ::map(p.y, TS_MAXY, TS_MINY, 0, SCREENHEIGHT - 1);
-
-      // Handle icon bar touches
-      if (y >= STATUS_BAR_Y_OFFSET && y <= STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT + 5) {
-        for (int i = 0; i < ICON_NUM; i++) {
-          // Expanded hit box: 5px padding on each side for easier touch
-          if (x >= iconX[i] - 5 && x <= iconX[i] + ICON_SIZE + 5) {
-            if (icons[i] != NULL && animationState == 0) {
-              tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, TFT_BLACK);
-              animationState = 1;
-              activeIcon = i;
-              lastAnimationTime = millis();
-            }
-            break;
-          }
-        }
-      }
-      // Handle device list touch selection
-      else if (currentView == ViewMode::LIST_VIEW) {
-        int listStartY = Y_OFFSET + HEADER_HEIGHT + 5;
-        int rowHeight = 18;
-        if (y >= listStartY && y < listStartY + (VISIBLE_ROWS * rowHeight)) {
-          int touchedRow = (y - listStartY) / rowHeight;
-          int deviceIdx = listScrollOffset + touchedRow;
-          if (deviceIdx < deviceCount) {
-            selectedDeviceIndex = deviceIdx;
-            currentView = ViewMode::DETAIL_VIEW;
-            lastListUpdate = 0;
-          }
-        }
-      }
-      // Handle detail view touch (action buttons)
-      else if (currentView == ViewMode::DETAIL_VIEW) {
-        int startY = Y_OFFSET + HEADER_HEIGHT + 5;
-        int buttonY = startY + 28 + (18 * 8) + 25;
-
-        if (y >= buttonY && y < buttonY + 25) {
-          if (x >= 5 && x < 115) {
-            // COPY MAC button - flash feedback
-            tft.fillRect(5, buttonY, 110, 25, SHREDDY_TEAL);
-            delay(100);
-            lastListUpdate = 0;
-          } else if (x >= 125 && x < 235) {
-            // TRACK button - flash feedback
-            tft.fillRect(125, buttonY, 110, 25, SHREDDY_PINK);
-            delay(100);
-            lastListUpdate = 0;
-          }
-        }
-      }
-    }
-    lastTouchCheck = millis();
-  }
-}
-
-public:
-  void setup() {
-    // FIRST: Stop any active scans from previous session
-    scanning = false;  // Prevent callbacks from adding devices
-    if (pBLEScan != nullptr) {
-      pBLEScan->stop();
-      pBLEScan->clearResults();
-    }
-    esp_bt_gap_cancel_discovery();
-    delay(100);  // Let pending callbacks complete
-
-    // NOW reset all state for clean re-entry
-    deviceCount = 0;
-    suspiciousCount = 0;
-    lineNumber = 1;
-    newDevicesThisScan = 0;
-    lastDeviceCount = -1;
-    lastSuspiciousCount = -1;
-    scanning = true;
-    isBLEScanActive = true;
-    lastScanTime = 0;
-    lastFlashToggle = 0;
-    flashState = false;
-    pBLEScan = nullptr;
-    pDeviceCallbacks = nullptr;
-
-    // Clear device and display arrays
-    for (int i = 0; i < MAX_DEVICES; i++) {
-      devices[i] = DeviceInfo();
-    }
-    for (int i = 0; i < MAX_LINES; i++) {
-      displayLines[i] = DisplayLine();
-    }
-
-    // Reset view state
-    currentView = ViewMode::LIST_VIEW;
-    selectedDeviceIndex = -1;
-    listScrollOffset = 0;
-    highlightedRow = 0;
-    lastListUpdate = 0;
-
-    uiDrawn = false;
-
-    float currentBatteryVoltage = readBatteryVoltage();
-    drawStatusBar(currentBatteryVoltage, false);
-    runUI();
-
-    setupTouchscreen();
-
-    // Initialize button pins for navigation
-    pcf.pinMode(BTN_UP, INPUT_PULLUP);
-    pcf.pinMode(BTN_DOWN, INPUT_PULLUP);
-    pcf.pinMode(BTN_LEFT, INPUT_PULLUP);
-    pcf.pinMode(BTN_RIGHT, INPUT_PULLUP);
-
-    initDisplay();
-
-    // Check BT controller status and initialize if needed
-    esp_bt_controller_status_t bt_status = esp_bt_controller_get_status();
-
-    if (bt_status == ESP_BT_CONTROLLER_STATUS_IDLE) {
-      // Controller not initialized - do full init
-      esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-      if (esp_bt_controller_init(&bt_cfg) != ESP_OK) {
-        addLine("Failed to init BT controller", RED, true, MessageType::ALERT);
-        return;
-      }
-      if (esp_bt_controller_enable(ESP_BT_MODE_BTDM) != ESP_OK) {
-        addLine("Failed to enable BT controller", RED, true, MessageType::ALERT);
-        return;
-      }
-      if (esp_bluedroid_init() != ESP_OK) {
-        addLine("Failed to init Bluedroid", RED, true, MessageType::ALERT);
-        return;
-      }
-      if (esp_bluedroid_enable() != ESP_OK) {
-        addLine("Failed to enable Bluedroid", RED, true, MessageType::ALERT);
-        return;
-      }
-    } else if (bt_status == ESP_BT_CONTROLLER_STATUS_INITED) {
-      // Controller inited but not enabled
-      if (esp_bt_controller_enable(ESP_BT_MODE_BTDM) != ESP_OK) {
-        addLine("Failed to enable BT controller", RED, true, MessageType::ALERT);
-        return;
-      }
-      if (esp_bluedroid_init() != ESP_OK) {
-        addLine("Failed to init Bluedroid", RED, true, MessageType::ALERT);
-        return;
-      }
-      if (esp_bluedroid_enable() != ESP_OK) {
-        addLine("Failed to enable Bluedroid", RED, true, MessageType::ALERT);
-        return;
-      }
-    }
-    // If ESP_BT_CONTROLLER_STATUS_ENABLED, already good
-
-    // Initialize BLE after controller is ready
-    BLEDevice::init("");
-    pBLEScan = BLEDevice::getScan();
-    pDeviceCallbacks = new AdvertisedDeviceCallbacks(*this);
-    pBLEScan->setAdvertisedDeviceCallbacks(pDeviceCallbacks);
-    pBLEScan->setActiveScan(true);
-
-    // Register classic BT callback
-    esp_bt_gap_register_callback(btCallback);
-
-    addLine("Bluetooth Sniffer Ready", DARK_GRAY, true, MessageType::STATUS);
-    startBLEScan();
-  }
-
-  void loop() {
-    unsigned long now = millis();
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
-
-    updateStatusBar();
-    runUI();
-    cleanupDevices(now);
-
-    // Handle button navigation for list/detail views
-    handleNavigation();
-
-    // Draw current view
-    if (now - lastListUpdate >= 500) {  // Update display every 500ms
-      switch (currentView) {
-        case ViewMode::LIST_VIEW:
-          drawListView();
-          break;
-        case ViewMode::DETAIL_VIEW:
-          drawDetailView();
-          break;
-        case ViewMode::LOG_VIEW:
-        default:
-          updateDisplay();
-          break;
-      }
-      lastListUpdate = now;
-    }
-
-    if (scanning && now - lastScanTime >= SCAN_INTERVAL) {
-      if (isBLEScanActive) {
-        pBLEScan->stop();
-        startBTScan();
-        isBLEScanActive = false;
-      } else {
-        esp_bt_gap_cancel_discovery();
-        startBLEScan();
-        isBLEScanActive = true;
-      }
-      lastScanTime = now;
-    }
-  }
-
-  void handleNavigation() {
-    static unsigned long lastButtonCheck = 0;
-    if (millis() - lastButtonCheck < 150) return;  // Debounce
-    lastButtonCheck = millis();
-
-    // UP button - scroll up / previous device
-    if (!pcf.digitalRead(BTN_UP)) {
-      if (currentView == ViewMode::LIST_VIEW) {
-        if (highlightedRow > 0) {
-          highlightedRow--;
-        } else if (listScrollOffset > 0) {
-          listScrollOffset--;
-        }
-        lastListUpdate = 0;  // Force redraw
-      } else if (currentView == ViewMode::DETAIL_VIEW) {
-        // Go to previous device
-        if (selectedDeviceIndex > 0) {
-          selectedDeviceIndex--;
-          lastListUpdate = 0;
-        }
-      }
-    }
-
-    // DOWN button - scroll down / next device
-    if (!pcf.digitalRead(BTN_DOWN)) {
-      if (currentView == ViewMode::LIST_VIEW) {
-        int maxHighlight = min(VISIBLE_ROWS - 1, deviceCount - listScrollOffset - 1);
-        if (highlightedRow < maxHighlight) {
-          highlightedRow++;
-        } else if (listScrollOffset + VISIBLE_ROWS < deviceCount) {
-          listScrollOffset++;
-        }
-        lastListUpdate = 0;  // Force redraw
-      } else if (currentView == ViewMode::DETAIL_VIEW) {
-        // Go to next device
-        if (selectedDeviceIndex < deviceCount - 1) {
-          selectedDeviceIndex++;
-          lastListUpdate = 0;
-        }
-      }
-    }
-
-    // LEFT button - back to list from detail
-    if (!pcf.digitalRead(BTN_LEFT)) {
-      if (currentView == ViewMode::DETAIL_VIEW) {
-        currentView = ViewMode::LIST_VIEW;
-        lastListUpdate = 0;
-      }
-    }
-
-    // RIGHT button - select device / enter detail view
-    if (!pcf.digitalRead(BTN_RIGHT)) {
-      if (currentView == ViewMode::LIST_VIEW && deviceCount > 0) {
-        selectedDeviceIndex = listScrollOffset + highlightedRow;
-        if (selectedDeviceIndex < deviceCount) {
-          currentView = ViewMode::DETAIL_VIEW;
-          lastListUpdate = 0;
-        }
-      }
-    }
-  }
-
-  class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
-    BluetoothSniffer& sniffer;
-  public:
-    AdvertisedDeviceCallbacks(BluetoothSniffer& s) : sniffer(s) {}
-    void onResult(BLEAdvertisedDevice advertisedDevice) override {
-      String mac = advertisedDevice.getAddress().toString().c_str();
-      int rssi = advertisedDevice.getRSSI();
-      unsigned long timestamp = millis();
-      int idx = -1;
-      for (int i = 0; i < sniffer.deviceCount; i++) {
-        if (sniffer.devices[i].mac == mac && sniffer.devices[i].isBLE) {
-          idx = i;
-          break;
-        }
-      }
-      if (idx >= 0) {
-        sniffer.devices[idx].rssi = rssi;
-        sniffer.devices[idx].packetCount++;
-        sniffer.devices[idx].lastSeen = timestamp;
-        if (sniffer.isRandomizedMac(mac)) {
-          sniffer.devices[idx].macChangeCount++;
-        }
-        sniffer.checkSuspiciousActivity(idx, timestamp);
-      } else {
-        sniffer.processNewDevice(&advertisedDevice, nullptr, timestamp, true);
-      }
-    }
-  };
-
-  static void btCallback(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param) {
-    if (!snifferInstance) return;
-    if (event == ESP_BT_GAP_DISC_RES_EVT) {
-      unsigned long timestamp = millis();
-      int idx = -1;
-      char macStr[18];
-      snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
-               param->disc_res.bda[0], param->disc_res.bda[1], param->disc_res.bda[2],
-               param->disc_res.bda[3], param->disc_res.bda[4], param->disc_res.bda[5]);
-      String mac = macStr;
-      for (int i = 0; i < snifferInstance->deviceCount; i++) {
-        if (snifferInstance->devices[i].mac == mac && !snifferInstance->devices[i].isBLE) {
-          idx = i;
-          break;
-        }
-      }
-      if (idx >= 0) {
-        snifferInstance->devices[idx].packetCount++;
-        snifferInstance->devices[idx].lastSeen = timestamp;
-        snifferInstance->checkSuspiciousActivity(idx, timestamp);
-      } else {
-        snifferInstance->processNewDevice(nullptr, param, timestamp, false);
-      }
-    }
-  }
-
-  void startBLEScan() {
-    newDevicesThisScan = 0;
-    pBLEScan->start(Config::bleScanDuration, false);
-    addLine("BLE Scan Started T:" + String(millis()), DARK_GRAY, true, MessageType::STATUS);
-    updateHeader();
-  }
-
-  void startBTScan() {
-    newDevicesThisScan = 0;
-    esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, Config::btScanDuration, 0);
-    addLine("Classic BT Scan Started T:" + String(millis()), DARK_GRAY, true, MessageType::STATUS);
-    updateHeader();
-  }
-
-  void setSnifferInstance() {
-    snifferInstance = this;
-  }
-
-  void cleanup() {
-    // Stop any active scans
-    if (pBLEScan != nullptr) {
-      pBLEScan->stop();
-      pBLEScan->clearResults();
-    }
-    esp_bt_gap_cancel_discovery();
-
-    // Cleanup callback pointer
-    if (pDeviceCallbacks != nullptr) {
-      delete pDeviceCallbacks;
-      pDeviceCallbacks = nullptr;
-    }
-
-    // Deinit BLE but keep BT controller running for faster re-entry
-    BLEDevice::deinit(false);  // false = don't release BT controller
-
-    // Reset state
-    pBLEScan = nullptr;
-    scanning = false;
-  }
-};
-
-BluetoothSniffer* BluetoothSniffer::snifferInstance = nullptr;
-BluetoothSniffer sniffer;
-
-void blesnifferSetup() {
-  tft.fillRect(0, 37, 240, 320, TFT_BLACK);
-  sniffer.setup();
-  sniffer.setSnifferInstance();
-}
-
-void blesnifferLoop() {
-  sniffer.loop();
-}
-
-void blesnifferCleanup() {
-  sniffer.cleanup();
-}
-
-#else  // !BOARD_HAS_BT_CLASSIC (ESP32-C5: BLE-only, no BR/EDR radio)
-
-// The combined BLE + Classic sniffer needs Bluetooth Classic discovery, which
-// the ESP32-C5 hardware cannot do. Present a clear message and steer users to
-// the dedicated BLE Scanner, which works on this board.
-void blesnifferSetup() {
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextSize(1);
-  tft.setTextColor(TFT_RED, TFT_BLACK);
-  tft.setCursor(10, 40);
-  tft.print("BT sniffer unavailable");
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-  tft.setCursor(10, 58);
-  tft.print("ESP32-C5 has no BR/EDR radio.");
-  tft.setCursor(10, 80);
-  tft.print("Use the BLE Scanner instead.");
-}
-
-void blesnifferLoop() {
-  delay(50);
-}
-
-void blesnifferCleanup() {}
-
-#endif // BOARD_HAS_BT_CLASSIC
-
-}  // namespace BleSniffer

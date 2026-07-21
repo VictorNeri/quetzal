@@ -22,6 +22,8 @@ float readBatteryVoltage();
 float readInternalTemperature();
 bool isSDCardAvailable();
 void drawStatusBar(float batteryVoltage, bool forceUpdate = false);
+void checkStatusBarTap();
+void showConnectivityPopup();
 
 void showNotification(const char* title, const char* message);
 void hideNotification();

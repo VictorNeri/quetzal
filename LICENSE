@@ -1,56 +1,15 @@
-              _                                                   _
-         .k$$$$$g,                                           ,g$$$$$k.
-      .k$$$$$$$$$$$a.                                     .a$$$$$$$$$$$k.
-    .J$$$$$?'   `?$?^?,                                 ,?^?$?`   `?$$$$$L.
-   JS$$SI!a,  _.JS$   ?,                               ,?   $SL._  ,a$!IS$$SL
-  k$$$SI!:?$$$$$$$$$xu$$j                              j$$ux$$$$$$$$$?:!IS$$$k
- :I$$SI:J$$?*"$$$$4^?*?:                               :?*?^4$$$$"*?$$L:iIS$$I:
- :IS$$SiJ?`  _.'$?`/'   ':                           :'    '/'?$'._  `?LiS$$SI:
-  ?ISSik? _        ',    `                              .    ,'       _ ?kiSSI?
-    ?i$?` _   k$        .                               :.        $k   _ `?$i?
-      '?I:-?z$$I   _._.'                                  ._._   I$$z?-:I?'
-     '*?- '?$$a louSxuS?                               ?xuSxuol a$$?' -?*'
-           i$$$$$$$$$$$S                               S$$$$$$$$$$$i
-              ?$$$?-                                       -?$$$?
-
-     ██░ ██  ▄▄▄       ██▓    ▓█████  ██░ ██  ▒█████   █    ██  ███▄    █ ▓█████▄
-    ▓██░ ██▒▒████▄    ▓██▒    ▓█   ▀ ▓██░ ██▒▒██▒  ██▒ ██  ▓██▒ ██ ▀█   █ ▒██▀ ██▌
-    ▒██▀▀██░▒██  ▀█▄  ▒██░    ▒███   ▒██▀▀██░▒██░  ██▒▓██  ▒██░▓██  ▀█ ██▒░██   █▌
-    ░▓█ ░██ ░██▄▄▄▄██ ▒██░    ▒▓█  ▄ ░▓█ ░██ ▒██   ██░▓▓█  ░██░▓██▒  ▐▌██▒░▓█▄   ▌
-    ░▓█▒░██▓ ▓█   ▓██▒░██████▒░▒████▒░▓█▒░██▓░ ████▓▒░▒▒█████▓ ▒██░   ▓██░░▒████▓
-     ▒ ░░▒░▒ ▒▒   ▓▒█░░ ▒░▓  ░░░ ▒░ ░ ▒ ░░▒░▒░ ▒░▒░▒░ ░▒▓▒ ▒ ▒ ░ ▒░   ▒ ▒  ▒▒▓  ▒
-     ▒ ░▒░ ░  ▒   ▒▒ ░░ ░ ▒  ░ ░ ░  ░ ▒ ░▒░ ░  ░ ▒ ▒░ ░░▒░ ░ ░ ░ ░░   ░ ▒░ ░ ▒  ▒
-     ░  ░░ ░  ░   ▒     ░ ░      ░    ░  ░░ ░░ ░ ░ ▒   ░░░ ░ ░    ░   ░ ░  ░ ░  ░
-     ░  ░  ░      ░  ░    ░  ░   ░  ░ ░  ░  ░    ░ ░     ░              ░    ░
-
-              _                                                   _
-         .k$$$$$g,                                           ,g$$$$$k.
-      .k$$$$$$$$$$$a.                                     .a$$$$$$$$$$$k.
-    .J$$$$$?'   `?$?^?,                                 ,?^?$?`   `?$$$$$L.
-   JS$$SI!a,  _.JS$   ?,                               ,?   $SL._  ,a$!IS$$SL
-  k$$$SI!:?$$$$$$$$$xu$$j                              j$$ux$$$$$$$$$?:!IS$$$k
- :I$$SI:J$$?*"$$$$4^?*?:                              :?*?^4$$$$"*?$$L:iIS$$I:
- :IS$$SiJ?`  _.'$?`/'  ':                            :'    '/'?$'._  `?LiS$$SI:
-  ?ISSik? _        ',  .                                .    ,'       _ ?kiSSI?
-    ?i$?` _  k$        .:                              :.        $k   _ `?$i?
-      '?I:-?z$$I   _._.'                                  ._._   I$$z?-:I?'
-     '*?- '?$$a louSxuS?                               ?xuSxuol a$$?' -?*'
-           i$$$$$$$$$$$S                               S$$$$$$$$$$$i
-              ?$$$?-                                       -?$$$?
-
 ================================================================================
-               ESP32-DIV FIRMWARE - HALEHOUND EDITION
+                          QUETZAL - PENTESTING TOOLS
 ================================================================================
-  Repository:   https://github.com/JesseCHale/ESP32-DIV
-  Author:       HaleHound (JesseCHale)
-  Website:      https://github.com/JesseCHale
+  Repository:   https://github.com/VictorNeri/quetzal
 ================================================================================
 
 
                               MIT LICENSE
 
 Copyright (c) 2023 CiferTech (original ESP32-DIV foundation)
-Copyright (c) 2026 HaleHound (HaleHound Edition - substantial rewrite)
+Copyright (c) 2026 Jesse C. Hale (HaleHound Edition - substantial rewrite)
+Copyright (c) 2026 Victor Neri (NM-CYD-C5 port and subsequent modifications)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -75,40 +34,11 @@ SOFTWARE.
                            PROJECT DESCRIPTION
 ================================================================================
 
-ESP32-DIV HaleHound Edition is a substantial rewrite of the original ESP32-DIV
-firmware, designed for ESP32-based wireless security research and penetration
-testing devices. This edition focuses on stability, expanded functionality,
-and continued support for V1 hardware.
-
-HALEHOUND EDITION ENHANCEMENTS:
-
-  Core Improvements:
-    - 30+ bug fixes including v2.5.0 stability improvements
-    - SPI bus architecture overhaul for reliable peripheral communication
-    - Centralized touch calibration system for DIY builds
-    - Memory management optimizations
-    - TX/RX pin swap fix for CC1101 SubGHz module
-
-  New Features:
-    - Spectrum Analyzer with visual frequency display
-    - ProtoKill - Protocol disruption capabilities
-    - WLAN Jammer functionality
-    - WiFi Deauther complete overhaul
-    - Scanner/Spectrum Analyzer complete redesign
-    - Skull wave activity spinner animation
-    - Enhanced menu system and UI improvements
-
-  Accessibility:
-    - Duggie Edition support for accessibility needs
-    - Configurable display and input options
-    - Touch calibration persistence
-
-  Hardware Support:
-    - Continued V1 board support (ESP32-WROOM-32U)
-    - V2 board compatibility (ESP32-S3)
-    - CC1101 SubGHz module integration
-    - NRF24L01 support
-    - TFT display with XPT2046 touch
+Quetzal is a wireless security research and penetration testing firmware
+for the NM-CYD-C5 (ESP32-C5-WROOM-1) board. It began as a port of
+ESP32-DIV / HaleHound Edition to this new hardware and has continued to
+diverge since — see README.md for the current feature set and a full
+description of the project.
 
 
 ================================================================================
@@ -124,7 +54,6 @@ limited to:
   - Hardware pin mappings and schematics references
   - Menu definitions and UI assets
   - Supporting libraries developed for this project
-  - ASCII art and branding assets
 
 THIRD-PARTY COMPONENTS:
 This project builds upon and includes components from various open-source
@@ -134,6 +63,7 @@ their own licensing terms. Notable dependencies include:
   - ESP32 Arduino Core (LGPL)
   - TFT_eSPI library
   - RCSwitch library
+  - NimBLE-Arduino
   - Various ESP32 peripheral libraries
 
 Users are responsible for compliance with all applicable third-party licenses.
@@ -151,16 +81,17 @@ ORIGINAL WORK ATTRIBUTION:
   - Original project: https://github.com/cifertech/ESP32-DIV
 
 HALEHOUND EDITION ATTRIBUTION:
-  - Jesse C. Hale (JesseCHale) developed the HaleHound Edition
+  - Jesse C. Hale (JesseCHale) developed the HaleHound Edition this project
+    was ported from
   - HaleHound Edition: https://github.com/JesseCHale/ESP32-DIV
 
 FOR DIRECT USE:
   - Retain this LICENSE file in any distribution
   - Maintain copyright notices in source files
-  - Both original and HaleHound copyrights must be preserved
+  - Original, HaleHound, and subsequent copyrights must be preserved
 
 FOR MODIFICATIONS AND FORKS:
-  - Include both original copyright notices
+  - Include all prior copyright notices
   - Clearly indicate modifications made
   - Suggested attribution format:
 
@@ -170,7 +101,7 @@ FOR MODIFICATIONS AND FORKS:
 
 FOR DERIVATIVE WORKS:
   - You may create derivative works under the same MIT license
-  - Original attribution chain must be preserved
+  - The full attribution chain must be preserved
   - You may add your own copyright for your modifications
 
 
@@ -258,10 +189,10 @@ By using this software, you acknowledge that:
                          HARDWARE DISCLAIMER
 ================================================================================
 
-This firmware is designed for specific ESP32-based hardware configurations.
-Improper use may result in:
+This firmware is designed for a specific ESP32-C5-based hardware
+configuration. Improper use may result in:
 
-  - Damage to your ESP32 device or connected peripherals
+  - Damage to your device or connected peripherals
   - RF interference with nearby devices
   - Violation of radio frequency regulations
   - Voiding of hardware warranties
@@ -270,11 +201,8 @@ The authors provide no warranty for hardware compatibility or safety.
 Users assume all risk when flashing and operating this firmware.
 
 SUPPORTED HARDWARE:
-  - ESP32-WROOM-32U (V1 boards)
-  - ESP32-S3 (V2 boards)
-  - Compatible TFT displays with XPT2046 touch
-  - CC1101 SubGHz modules
-  - NRF24L01 modules
+  - NM-CYD-C5 (ESP32-C5-WROOM-1) only — see README.md
+  - NM-RF-HAT (CC1101 SubGHz or NRF24L01+, one at a time)
 
 Always verify pin mappings and hardware compatibility before use.
 
@@ -283,23 +211,8 @@ Always verify pin mappings and hardware compatibility before use.
                               CONTACT
 ================================================================================
 
-  GitHub:       https://github.com/JesseCHale
-  Repository:   https://github.com/JesseCHale/ESP32-DIV
-  Issues:       https://github.com/JesseCHale/ESP32-DIV/issues
+  Repository:   https://github.com/VictorNeri/quetzal
 
-ORIGINAL PROJECT:
-  CiferTech:    https://github.com/cifertech
-  Original:     https://github.com/cifertech/ESP32-DIV
-
-
-================================================================================
-                           HALEHOUND EDITION
-================================================================================
-
-     "Security Through Understanding, Protection Through Knowledge"
-
-           Part of the HaleHound Security Research Collection
-
-    ESP32-DIV HaleHound Edition - Keeping V1 Boards Alive Since 2026
-
-================================================================================
+UPSTREAM PROJECTS:
+  HaleHound Edition (ported from):  https://github.com/JesseCHale/ESP32-DIV
+  Original ESP32-DIV:               https://github.com/cifertech/ESP32-DIV

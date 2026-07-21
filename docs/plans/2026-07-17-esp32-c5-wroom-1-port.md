@@ -1,5 +1,10 @@
 # ESP32-C5-WROOM-1 Port Implementation Plan
 
+> **Archived planning document.** The NM-CYD-C5 port is implemented and the
+> current firmware is documented in the repository README and `docs/` guides.
+> Paths and intermediate assumptions below are retained as implementation
+> history and should not be treated as current build instructions.
+
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task after Victor confirms the target carrier board/wiring.
 
 **Goal:** Port ESP32-DIV HaleHound firmware from ESP32-WROOM-32U to the NM-CYD-C5 / ESP32-C5-WROOM-1 board while preserving display/touch, WiFi, BLE, SD, firmware-update functionality, and one active RF module at a time where the ESP32-C5 Arduino core supports it. Multi-NRF24 plus simultaneous CC1101 support is explicitly deferred until external RF switching/mux hardware exists.

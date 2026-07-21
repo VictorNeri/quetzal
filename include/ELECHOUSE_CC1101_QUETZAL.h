@@ -1,9 +1,10 @@
-#ifndef ELECHOUSE_CC1101_ESP32DIV_COMPAT_H
-#define ELECHOUSE_CC1101_ESP32DIV_COMPAT_H
+#ifndef ELECHOUSE_CC1101_QUETZAL_COMPAT_H
+#define ELECHOUSE_CC1101_QUETZAL_COMPAT_H
 
-// Compatibility shim for the ESP32-DIV source tree.
-// The firmware historically included a locally named/forked CC1101 header:
-//   <ELECHOUSE_CC1101_ESP32DIV.h>
+// Compatibility shim for the Quetzal source tree.
+// The inherited firmware used a locally named/forked CC1101 header; Quetzal
+// keeps a project-local wrapper with a distinct name:
+//   <ELECHOUSE_CC1101_QUETZAL.h>
 // PlatformIO installs the upstream SmartRC/ELECHOUSE library, whose public
 // header is:
 //   <ELECHOUSE_CC1101_SRC_DRV.h>
@@ -20,4 +21,4 @@
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #undef byte
 
-#endif // ELECHOUSE_CC1101_ESP32DIV_COMPAT_H
+#endif // ELECHOUSE_CC1101_QUETZAL_COMPAT_H

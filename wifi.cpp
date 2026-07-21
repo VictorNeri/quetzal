@@ -6,6 +6,7 @@ extern void cleanupNRF24();
 #include "shared.h"
 #include "icon.h"
 #include "Touchscreen.h"
+#include <esp_system.h>
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SD Card Cleanup - Release GPIO 5 for NRF24 radio3
@@ -26,7 +27,7 @@ void cleanupSD() {
 
 /*
    PacketMonitor
-   
+
 */
 
 namespace PacketMonitor {
@@ -181,7 +182,7 @@ void do_sampling_FFT() {
   if (tattenuation > attenuation)
     attenuation = tattenuation;
 
-  tft.setTextColor(SHREDDY_TEAL);
+  tft.setTextColor(UI_CYAN);
   tft.setTextSize(1);
   tft.setTextFont(1);
 
@@ -283,7 +284,7 @@ void runUI() {
     tft.fillRect(160, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH - 160, STATUS_BAR_HEIGHT, DARK_GRAY);
     for (int i = 0; i < ICON_NUM; i++) {
       if (icons[i] != NULL) {
-        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
       }
     }
     tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
@@ -297,7 +298,7 @@ void runUI() {
 
   if (animationState > 0 && millis() - lastAnimationTime >= 150) {
     if (animationState == 1) {
-      tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+      tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, UI_CYAN);
       animationState = 2;
     } else if (animationState == 2) {
       animationState = 0;
@@ -415,8 +416,8 @@ void ptmLoop() {
   esp_wifi_set_promiscuous_rx_cb(&wifi_promiscuous);
   esp_wifi_set_promiscuous(true);
 
-  tft.drawLine(0, 90, 240, 90, SHREDDY_TEAL);
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 90, 240, 90, UI_CYAN);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
 
   do_sampling_FFT();
   delay(10);
@@ -565,7 +566,7 @@ void output() {
   for (int i = 0; i < 18; i++) {
     tft.setCursor(2, 130 + i * 10 + y_offset);
     String randomSSID = ssidList[random(ssidCount)];
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
     tft.print("[+] ");
     tft.print(randomSSID);
     delay(random(500));
@@ -612,17 +613,17 @@ void beaconSpam() {
     String ssid = "1234567890qwertyuiopasdfghjkklzxcvbnm QWERTYUIOPASDFGHJKLZXCVBNM_";
     uint8_t channel;
 
-    uint8_t packet[128] = { 0x80, 0x00, 0x00, 0x00, 
-                            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
+    uint8_t packet[128] = { 0x80, 0x00, 0x00, 0x00,
+                            0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                             0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
-                            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 
-                            0xc0, 0x6c, 
-                            0x83, 0x51, 0xf7, 0x8f, 0x0f, 0x00, 0x00, 0x00, 
-                            0x64, 0x00, 
-                            0x01, 0x04, 
+                            0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+                            0xc0, 0x6c,
+                            0x83, 0x51, 0xf7, 0x8f, 0x0f, 0x00, 0x00, 0x00,
+                            0x64, 0x00,
+                            0x01, 0x04,
                             0x00, 0x06, 0x72, 0x72, 0x72, 0x72, 0x72, 0x72,
                             0x01, 0x08, 0x82, 0x84,
-                            0x8b, 0x96, 0x24, 0x30, 0x48, 0x6c, 0x03, 0x01, 
+                            0x8b, 0x96, 0x24, 0x30, 0x48, 0x6c, 0x03, 0x01,
                             0x04};
 
     tft.setTextFont(1);
@@ -632,7 +633,7 @@ void beaconSpam() {
     tft.setCursor(2, 30 + y_offset);
     tft.print("[!!] FUCK IT");
     tft.setCursor(2, 50 + y_offset);
-    tft.print("[!!] Press [Select] to exit");                        
+    tft.print("[!!] Press [Select] to exit");
 
     delay(500);
 
@@ -668,7 +669,7 @@ void beaconSpam() {
     }
 
     while (true) {
-        channel = random(1, 13);  
+        channel = random(1, 13);
         esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
 
         for (int i = 10; i <= 15; i++) {
@@ -701,12 +702,12 @@ void beaconSpam() {
             Serial.printf("Packet 3 send failed: %d\n", result);
         }
 
-        delay(1); 
-        
+        delay(1);
+
       if (pcf.digitalRead(BTN_SELECT) == LOW) {
         break;
       }
-         
+
     }
 }
 
@@ -718,15 +719,16 @@ void runUI() {
 #define STATUS_BAR_Y_OFFSET 20
 #define STATUS_BAR_HEIGHT 16
 #define ICON_SIZE 16
+#undef ICON_NUM
 #define ICON_NUM 5
 
   static int iconX[ICON_NUM] = {130, 160, 190, 220, 10};
   static int iconY = STATUS_BAR_Y_OFFSET;
 
   static const unsigned char* icons[ICON_NUM] = {
-    bitmap_icon_sort_down_minus,  
-    bitmap_icon_sort_up_plus,     
-    bitmap_icon_start,             
+    bitmap_icon_sort_down_minus,
+    bitmap_icon_sort_up_plus,
+    bitmap_icon_start,
     bitmap_icon_nuke,
     bitmap_icon_go_back // Added back icon
   };
@@ -735,7 +737,7 @@ void runUI() {
     tft.fillRect(120, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH - 120, STATUS_BAR_HEIGHT, DARK_GRAY);
     for (int i = 0; i < ICON_NUM; i++) {
       if (icons[i] != NULL) {
-        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
       }
     }
     tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
@@ -743,17 +745,17 @@ void runUI() {
   }
 
   static unsigned long lastAnimationTime = 0;
-  static int animationState = 0;  
+  static int animationState = 0;
   static int activeIcon = -1;
   static unsigned long lastSpamTime = 0;
 
   switch (animationState) {
-    case 0: 
+    case 0:
       break;
 
-    case 1: 
+    case 1:
       if (millis() - lastAnimationTime >= 150) {
-        tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, UI_CYAN);
         animationState = 2;
         lastAnimationTime = millis();
       }
@@ -766,7 +768,7 @@ void runUI() {
       }
       break;
 
-    case 3: 
+    case 3:
       switch (activeIcon) {
         case 0:
           handleLeftButton();
@@ -781,7 +783,7 @@ void runUI() {
         case 2:
           handleSelectButton();
           if (spam) {
-            animationState = 4;  
+            animationState = 4;
           } else {
             animationState = 0;
             activeIcon = -1;
@@ -801,11 +803,11 @@ void runUI() {
       }
       break;
 
-    case 4: 
+    case 4:
       if (spam) {
         if (millis() - lastSpamTime >= 50) {
           spammer();
-          
+
           if (activeIcon == 3) {
             output();
           }
@@ -820,7 +822,7 @@ void runUI() {
       }
       break;
 
-    case 5: 
+    case 5:
       if (millis() - lastSpamTime >= 50) {
         animationState = 0;
         activeIcon = -1;
@@ -829,7 +831,7 @@ void runUI() {
   }
 
   static unsigned long lastTouchCheck = 0;
-  const unsigned long touchCheckInterval = 50;  
+  const unsigned long touchCheckInterval = 50;
 
   if (millis() - lastTouchCheck >= touchCheckInterval) {
     if (ts.touched() && feature_active) {
@@ -902,7 +904,7 @@ void beaconSpamLoop() {
   runUI();
   updateStatusBar();
 
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
 
   btnLeftPress = !pcf.digitalRead(BTN_LEFT);
   btnRightPress = !pcf.digitalRead(BTN_RIGHT);
@@ -925,7 +927,7 @@ void beaconSpamLoop() {
 
   tft.setTextFont(1);
   tft.fillRect(35, 20, 95, 16, DARK_GRAY);
-  tft.setTextColor(SHREDDY_TEAL);
+  tft.setTextColor(UI_CYAN);
   tft.setTextSize(1);
   tft.setCursor(35, 24);
   tft.print("Ch:");
@@ -937,16 +939,16 @@ void beaconSpamLoop() {
 
     while (spam) {
       spammer();
-  
+
       if (btnSelectPress) {
         output();
       }
-  
+
       if (pcf.digitalRead(BTN_UP)) {
         delay(50);
         break;
       }
-    } 
+    }
   }
 }
 
@@ -959,6 +961,7 @@ void beaconSpamLoop() {
 
 namespace DeauthDetect {
 
+#undef SCREEN_HEIGHT
 #define SCREEN_HEIGHT 280
 #define LINE_HEIGHT 12
 #define MAX_LINES (SCREEN_HEIGHT / LINE_HEIGHT)
@@ -978,6 +981,7 @@ namespace DeauthDetect {
 #define STATUS_BAR_Y_OFFSET 20
 #define STATUS_BAR_HEIGHT 16
 #define ICON_SIZE 16
+#undef ICON_NUM
 #define ICON_NUM 2
 
 bool stopScan = false;
@@ -1023,13 +1027,13 @@ void displayPrint(String text, uint16_t color, bool extraSpace = false) {
 
   if (extraSpace && lineIndex < MAX_LINES) {
     terminalBuffer[lineIndex] = "";
-    colorBuffer[lineIndex] = SHREDDY_TEAL;
+    colorBuffer[lineIndex] = UI_CYAN;
     lineIndex++;
   }
 
   for (int i = 0; i < lineIndex; i++) {
     int yPos = i * LINE_HEIGHT + 45;
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
     tft.fillRect(5, yPos, tft.width() - 10, LINE_HEIGHT, TFT_BLACK);
     tft.setTextColor(colorBuffer[i], TFT_BLACK);
     tft.setCursor(5, yPos);
@@ -1173,7 +1177,7 @@ void scanWiFiTask(void *param) {
       xSemaphoreTake(tftSemaphore, portMAX_DELAY);
       displayPrint("[+] " + ssidLists[i] + (fullSSID.length() > MAX_SSID_LENGTH ? "..." : "") +
                    " | CH: " + String(WiFi.channel(i)) +
-                   " | RSSI: " + String(WiFi.RSSI(i)), SHREDDY_TEAL);
+                   " | RSSI: " + String(WiFi.RSSI(i)), UI_CYAN);
       xSemaphoreGive(tftSemaphore);
 
       if (exitMode) {
@@ -1194,10 +1198,10 @@ void scanWiFiTask(void *param) {
 
 static bool uiDrawn = false;
 
-void runUI() {   
-  
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
-    
+void runUI() {
+
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
+
     static const unsigned char* icons[ICON_NUM] = {
         bitmap_icon_start,  // Icon 0: Stop scan
         bitmap_icon_go_back // Added back icon
@@ -1207,18 +1211,18 @@ void runUI() {
     if (!uiDrawn) {
         tft.setTextFont(1);
         tft.fillRect(0, 20, 140, 16, DARK_GRAY);
-        tft.setTextColor(SHREDDY_TEAL);
+        tft.setTextColor(UI_CYAN);
         tft.setTextSize(1);
         tft.setCursor(35, 24);
         tft.print("Scanning WiFi");
 
-        tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+        tft.drawLine(0, 19, 240, 19, UI_CYAN);
         tft.fillRect(140, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH - 140, STATUS_BAR_HEIGHT, DARK_GRAY);
-        
+
         for (int i = 0; i < ICON_NUM; i++) {
-            if (icons[i] != NULL) {  
-                tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
-            } 
+            if (icons[i] != NULL) {
+                tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
+            }
         }
         tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
         uiDrawn = true;
@@ -1231,7 +1235,7 @@ void runUI() {
 
     if (animationState > 0 && millis() - lastAnimationTime >= 150) {
         if (animationState == 1) {
-            tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+            tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, UI_CYAN);
             animationState = 2;
 
             // Execute action after animation
@@ -1243,14 +1247,14 @@ void runUI() {
                     animationState = 0;
                     activeIcon = -1;
                     break;
-                    
-                case 1: // Back icon action (exit to submenu)   
-                    displayPrint("[!] Scanning Stopped", ORANGE, true);  
-                    stopScan = true;      
+
+                case 1: // Back icon action (exit to submenu)
+                    displayPrint("[!] Scanning Stopped", ORANGE, true);
+                    stopScan = true;
                     feature_exit_requested = true;
                     animationState = 0;
                     activeIcon = -1;
-                    break;            
+                    break;
             }
         } else if (animationState == 2) {
             animationState = 0;
@@ -1372,6 +1376,7 @@ namespace WifiScan {
 #define STATUS_BAR_Y_OFFSET 20
 #define STATUS_BAR_HEIGHT 16
 #define ICON_SIZE 16
+#undef ICON_NUM
 #define ICON_NUM 2
 
 int currentIndex = 0;
@@ -1385,10 +1390,27 @@ const unsigned long scanTimeout = 2000;
 unsigned long lastButtonPress = 0;
 const unsigned long debounceTime = 200;
 
+#undef MAX_SSID_LENGTH
 #define MAX_SSID_LENGTH 10
 #define LIST_TOP (STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT + 15)
 #define LIST_ITEM_HEIGHT 18
 #define MAX_VISIBLE_ITEMS 14
+
+// This board has no physical buttons - buttons_compat.h's TouchButtonExpander
+// synthesizes virtual UP/DOWN/LEFT/RIGHT/SELECT presses from touch zones that
+// blanket the whole screen below the status bar (y 40-129 UP, y>=235 DOWN,
+// y 130-234 split into LEFT/SELECT/RIGHT by x). Any new touch target has to
+// sit inside a zone whose synthesized-button action is a no-op for the
+// current screen state, or the same tap also fires that virtual button.
+// WifiScan::handleButton()'s UP/DOWN branches are both gated on
+// `!isDetailView`, so they're harmless while this button is visible (it only
+// ever shows inside the Details view) - y>=235 (DOWN) is the safe zone here;
+// the LEFT/RIGHT/SELECT zones (y 130-234) all actively navigate away from
+// Details, which is what was causing "tapping Connect exits the screen."
+#define CONNECT_BTN_X 20
+#define CONNECT_BTN_Y 250
+#define CONNECT_BTN_W 200
+#define CONNECT_BTN_H 34
 
 static bool uiDrawn = false;
 
@@ -1406,19 +1428,19 @@ void displayWiFiList(bool fullRedraw = false) {
     tft.fillRect(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, TFT_WIDTH, TFT_HEIGHT - (STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT), TFT_BLACK);
 
     tft.fillRect(0, 20, 140, 16, DARK_GRAY);
-    tft.setTextColor(SHREDDY_TEAL);
+    tft.setTextColor(UI_CYAN);
     tft.setCursor(35, 24);
     tft.print("WiFi Networks:");
 
     if (networkCount <= 0) {
       tft.fillRect(0, 20, 140, 16, DARK_GRAY);
-      tft.setTextColor(SHREDDY_TEAL);
+      tft.setTextColor(UI_CYAN);
       tft.setCursor(5, 24);
       tft.print("No Networks Found");
       return;
     }
 
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
 
     for (int i = 0; i < MAX_VISIBLE_ITEMS; i++) {
       int currentNetworkIndex = i + listStartIndex;
@@ -1430,11 +1452,11 @@ void displayWiFiList(bool fullRedraw = false) {
       int yPos = LIST_TOP + i * LIST_ITEM_HEIGHT;
 
       if (currentNetworkIndex == currentIndex) {
-        tft.setTextColor(ORANGE, TFT_BLACK);
+        tft.setTextColor(UI_AMBER, TFT_BLACK);
         tft.setCursor(10, yPos);
         tft.print("> ");
       } else {
-        tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+        tft.setTextColor(UI_CYAN, TFT_BLACK);
         tft.setCursor(10, yPos);
         tft.print("  ");
       }
@@ -1459,11 +1481,11 @@ void displayWiFiList(bool fullRedraw = false) {
         tft.fillRect(0, yPos - 2, TFT_WIDTH, LIST_ITEM_HEIGHT, TFT_BLACK);
 
         if (currentNetworkIndex == currentIndex) {
-          tft.setTextColor(ORANGE, TFT_BLACK);
+          tft.setTextColor(UI_AMBER, TFT_BLACK);
           tft.setCursor(10, yPos);
           tft.print("> ");
         } else {
-          tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+          tft.setTextColor(UI_CYAN, TFT_BLACK);
           tft.setCursor(10, yPos);
           tft.print("  ");
         }
@@ -1483,7 +1505,7 @@ void displayScanning() {
   tft.fillRect(0, 20, 140, 16, DARK_GRAY);
   tft.fillRect(0, 37, 240, 320, TFT_BLACK);
 
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setCursor(10, STATUS_BAR_Y_OFFSET + 25);
   tft.print("[*] Scanning");
 
@@ -1494,12 +1516,12 @@ void displayScanning() {
     }
   }
 
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setCursor(10, STATUS_BAR_Y_OFFSET + 35);
   tft.print("[+] Scan complete!");
 
   delay(100);
-  
+
   tft.setCursor(10, STATUS_BAR_Y_OFFSET + 55);
   tft.print("[+] Wait a moment");
   isScanning = false;
@@ -1545,11 +1567,11 @@ void displayWiFiDetails() {
   }
 
   tft.fillRect(0, 20, 140, 16, DARK_GRAY);
-  tft.setTextColor(SHREDDY_TEAL);
+  tft.setTextColor(UI_CYAN);
   tft.setCursor(35, 24);
   tft.print("Network Details:");
 
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(1);
 
   tft.setCursor(10, STATUS_BAR_Y_OFFSET + 35 + y_shift);
@@ -1572,6 +1594,32 @@ void displayWiFiDetails() {
 
   tft.setCursor(10, STATUS_BAR_Y_OFFSET + 155 + y_shift);
   tft.print("Est. Distance: "); tft.print(estimatedDistance, 1); tft.print("m");
+
+  tft.drawRoundRect(CONNECT_BTN_X, CONNECT_BTN_Y, CONNECT_BTN_W, CONNECT_BTN_H, 4, UI_AMBER);
+  tft.setTextColor(UI_AMBER, TFT_BLACK);
+  tft.setCursor(CONNECT_BTN_X + 18, CONNECT_BTN_Y + 12);
+  tft.print("Connect to this network");
+}
+
+// Reuses FirmwareUpdate's password-entry UI + connect flow (see wificonfig.h)
+// for the network currently shown in the Details view.
+void attemptConnect() {
+  String ssid = WiFi.SSID(currentIndex);
+  bool ok = FirmwareUpdate::connectToKnownSSID(ssid.c_str());
+
+  // enterWiFiPassword() took over the whole screen with its own keyboard UI;
+  // redraw the details view (and Connect button) before showing the result.
+  displayWiFiDetails();
+
+  tft.setTextFont(1);
+  tft.setCursor(10, CONNECT_BTN_Y + CONNECT_BTN_H + 15);
+  if (ok) {
+    tft.setTextColor(UI_GREEN, TFT_BLACK);
+    tft.print("Connected! IP: " + WiFi.localIP().toString());
+  } else {
+    tft.setTextColor(RED, TFT_BLACK);
+    tft.print("Connect failed.");
+  }
 }
 
 void handleButton() {
@@ -1631,14 +1679,14 @@ void handleButton() {
 void runUI() {
 
     static int iconY = STATUS_BAR_Y_OFFSET;
-    
+
     if (!uiDrawn) {
-        tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+        tft.drawLine(0, 19, 240, 19, UI_CYAN);
         tft.fillRect(140, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH - 140, STATUS_BAR_HEIGHT, DARK_GRAY);
-        
+
         for (int i = 0; i < ICON_NUM; i++) {
             if (icons[i] != NULL) {
-                tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+                tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
             }
         }
         tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
@@ -1646,12 +1694,12 @@ void runUI() {
     }
 
     static unsigned long lastAnimationTime = 0;
-    static int animationState = 0;  
+    static int animationState = 0;
     static int activeIcon = -1;
 
     if (animationState > 0 && millis() - lastAnimationTime >= 150) {
         if (animationState == 1) {
-            tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+            tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, UI_CYAN);
             animationState = 2;
 
             switch (activeIcon) {
@@ -1672,7 +1720,7 @@ void runUI() {
     }
 
     static unsigned long lastTouchCheck = 0;
-    const unsigned long touchCheckInterval = 50; 
+    const unsigned long touchCheckInterval = 50;
 
     if (millis() - lastTouchCheck >= touchCheckInterval) {
         if (ts.touched() && feature_active) {
@@ -1692,6 +1740,9 @@ void runUI() {
                         break;
                     }
                 }
+            } else if (isDetailView && x >= CONNECT_BTN_X && x <= CONNECT_BTN_X + CONNECT_BTN_W &&
+                       y >= CONNECT_BTN_Y && y <= CONNECT_BTN_Y + CONNECT_BTN_H) {
+                attemptConnect();
             }
         }
         lastTouchCheck = millis();
@@ -1699,10 +1750,10 @@ void runUI() {
 }
 
 void wifiscanSetup() {
-  
+
   tft.setRotation(0);
   tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(1);
   tft.fillRect(0, 20, 140, 16, DARK_GRAY);
 
@@ -1726,7 +1777,7 @@ void wifiscanSetup() {
 }
 
 void wifiscanLoop() {
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
   static bool lastDetailView = false;
   static bool lastScanning = true;
 
@@ -1758,17 +1809,17 @@ void wifiscanLoop() {
 
 
 /*
- * 
- * 
+ *
+ *
  * Captive Portal
- * 
- * 
+ *
+ *
 */
 
 namespace CaptivePortal {
 
-const char* default_ssid = "ESP32DIV_AP";
-char custom_ssid[32] = "ESP32DIV_AP";
+const char* default_ssid = "QUETZAL_AP";
+char custom_ssid[32] = "QUETZAL_AP";
 const char* password = NULL;
 DNSServer dnsServer;
 const uint8_t DNS_PORT = 53;
@@ -1818,7 +1869,7 @@ const char** keyboardLayout = keyboardLower;
 bool cursorState = false;
 unsigned long lastCursorToggle = 0;
 
-const char* seriesSSIDs[] = {"ESP32DIV_AP", "FreeWiFi", "Loading..."};
+const char* seriesSSIDs[] = {"QUETZAL_AP", "FreeWiFi", "Loading..."};
 const int numSeriesSSIDs = 3;
 int seriesSSIDIndex = 0;
 
@@ -1873,13 +1924,13 @@ void displayPrint(String text, uint16_t color, bool extraSpace = false) {
 
   if (extraSpace && lineIndex < MAX_LINES) {
     terminalBuffer[lineIndex] = "";
-    colorBuffer[lineIndex] = SHREDDY_TEAL;
+    colorBuffer[lineIndex] = UI_CYAN;
     lineIndex++;
   }
 
   for (int i = 0; i < lineIndex; i++) {
     int yPos = i * LINE_HEIGHT + 45;
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
     tft.fillRect(5, yPos, tft.width() - 10, LINE_HEIGHT, TFT_BLACK);
     tft.setTextColor(colorBuffer[i], TFT_BLACK);
     tft.setCursor(5, yPos);
@@ -2043,10 +2094,10 @@ void deleteCredential(int index) {
 void clearAllCredentials() {
   EEPROM.put(COUNT_ADDR, (uint32_t)0);
 
-  int endAddr = CRED_ADDR + (MAX_CREDS * CRED_SIZE); 
+  int endAddr = CRED_ADDR + (MAX_CREDS * CRED_SIZE);
   if (endAddr > COUNT_ADDR) {
     Serial.println("Error: Credential clear would overwrite counter!");
-    endAddr = COUNT_ADDR; 
+    endAddr = COUNT_ADDR;
   }
   for (int i = CRED_ADDR; i < endAddr; i++) {
     EEPROM.write(i, 0);
@@ -2072,7 +2123,7 @@ void drawMainMenu() {
 void drawInputField() {
   tft.fillRect(10, 55, 220, 25, TFT_DARKGREY);
   tft.drawRect(9, 54, 222, 27, ORANGE);
-  tft.setTextColor(SHREDDY_TEAL);
+  tft.setTextColor(UI_CYAN);
   tft.setTextSize(2);
   tft.setCursor(15, 60);
   String displayText = inputSSID;
@@ -2105,7 +2156,7 @@ void drawKeyboard() {
     int xOffset = 1;
     for (int col = 0; col < strlen(keyboardLayout[row]); col++) {
       tft.fillRect(xOffset, yOffset, keyWidth, keyHeight, TFT_DARKGREY);
-      tft.setTextColor(SHREDDY_TEAL);
+      tft.setTextColor(UI_CYAN);
       tft.setTextSize(1);
       tft.setCursor(xOffset + 6, yOffset + 5);
       tft.print(keyboardLayout[row][col]);
@@ -2115,32 +2166,32 @@ void drawKeyboard() {
     yOffset += keyHeight + keySpacing;
   }
 
-tft.setTextColor(ORANGE); 
-tft.setTextSize(1); 
-tft.setTextDatum(MC_DATUM); 
+tft.setTextColor(ORANGE);
+tft.setTextSize(1);
+tft.setTextDatum(MC_DATUM);
 
 // Back Button
-tft.fillRoundRect(5, 185, 70, 25, 4, DARK_GRAY); 
-tft.drawRoundRect(5, 185, 70, 25, 4, ORANGE); 
-tft.drawString("Back", 40, 197); 
+tft.fillRoundRect(5, 185, 70, 25, 4, DARK_GRAY);
+tft.drawRoundRect(5, 185, 70, 25, 4, ORANGE);
+tft.drawString("Back", 40, 197);
 Serial.printf("Back button at x=5-75, y=185-210\n");
 
 // Series Button
-tft.fillRoundRect(85, 185, 70, 25, 4, DARK_GRAY); 
-tft.drawRoundRect(85, 185, 70, 25, 4, ORANGE); 
-tft.drawString("Shuffle", 120, 197); 
+tft.fillRoundRect(85, 185, 70, 25, 4, DARK_GRAY);
+tft.drawRoundRect(85, 185, 70, 25, 4, ORANGE);
+tft.drawString("Shuffle", 120, 197);
 Serial.printf("Series button at x=85-155, y=185-210\n");
 
 // OK Button
-tft.fillRoundRect(165, 185, 70, 25, 4, DARK_GRAY); 
-tft.drawRoundRect(165, 185, 70, 25, 4, ORANGE); 
-tft.drawString("OK", 200, 197); 
+tft.fillRoundRect(165, 185, 70, 25, 4, DARK_GRAY);
+tft.drawRoundRect(165, 185, 70, 25, 4, ORANGE);
+tft.drawString("OK", 200, 197);
 Serial.printf("OK button at x=165-235, y=185-210\n");
 }
 
 void drawCredList() {
   tft.fillRect(0, 37, 240, 320, TFT_BLACK);
-  tft.setTextColor(SHREDDY_TEAL);
+  tft.setTextColor(UI_CYAN);
   tft.setTextSize(1);
   tft.setCursor(0, 50);
   tft.println("Credentials List:");
@@ -2151,7 +2202,7 @@ void drawCredList() {
   tft.print("Pass");
   tft.setCursor(160, 70);
   tft.print("SSID");
-  tft.drawLine(0, 80, 245, 80, SHREDDY_TEAL);
+  tft.drawLine(0, 80, 245, 80, UI_CYAN);
 
   int count = EEPROM.read(COUNT_ADDR);
   Serial.printf("Reading %d credentials from EEPROM\n", count);
@@ -2169,8 +2220,8 @@ void drawCredList() {
       EEPROM.get(CRED_ADDR + (i * CRED_SIZE), cred);
       Serial.printf("Credential %d at address %d: User=%s, Pass=%s, SSID=%s\n",
                     i, CRED_ADDR + (i * CRED_SIZE), cred.username, cred.password, cred.ssid);
-                    
-      tft.setTextColor(SHREDDY_TEAL);
+
+      tft.setTextColor(UI_CYAN);
       tft.setCursor(0, yOffset);
       tft.println(cred.username);
       tft.setCursor(80, yOffset);
@@ -2187,13 +2238,13 @@ void drawCredList() {
     }
   }
 
-int buttonY = 290; 
-tft.setTextColor(ORANGE); 
-tft.setTextSize(1); 
-tft.setTextDatum(MC_DATUM); 
+int buttonY = 290;
+tft.setTextColor(ORANGE);
+tft.setTextSize(1);
+tft.setTextDatum(MC_DATUM);
 
 tft.fillRoundRect(5, buttonY, 50, 20, 8, DARK_GRAY);
-tft.drawRoundRect(5, buttonY, 50, 20, 8, ORANGE); 
+tft.drawRoundRect(5, buttonY, 50, 20, 8, ORANGE);
 tft.drawString("Back", 30, buttonY + 10);
 
 tft.fillRoundRect(65, buttonY, 50, 20, 8, DARK_GRAY);
@@ -2277,13 +2328,13 @@ void handleKeyboard(int x, int y) {
         char c = keyboardLayout[row][col];
         Serial.printf("Key pressed: %c at x=%d, y=%d\n", c, x, y);
         tft.fillRect(xOffset, yOffset, keyWidth, keyHeight, ORANGE);
-        tft.setTextColor(SHREDDY_TEAL);
+        tft.setTextColor(UI_CYAN);
         tft.setTextSize(1);
         tft.setCursor(xOffset + 6, yOffset + 5);
         tft.print(c);
         delay(100);
         tft.fillRect(xOffset, yOffset, keyWidth, keyHeight, TFT_DARKGREY);
-        tft.setTextColor(SHREDDY_TEAL);
+        tft.setTextColor(UI_CYAN);
         tft.setCursor(xOffset + 6, yOffset + 5);
         tft.print(c);
         if (c == '<') {
@@ -2352,7 +2403,7 @@ void handleCredList(int x, int y) {
   }
 
   int buttonY = 290; // Match drawing code
-  
+
   if (x >= 5 && x <= 55 && y >= buttonY && y <= buttonY + 20) {
     Serial.println("Back button pressed");
     currentScreen = MAIN_MENU;
@@ -2387,15 +2438,16 @@ void runUI() {
 #define STATUS_BAR_Y_OFFSET 20
 #define STATUS_BAR_HEIGHT 16
 #define ICON_SIZE 16
+#undef ICON_NUM
 #define ICON_NUM 5
 
   static int iconX[ICON_NUM] = {130, 160, 190, 220, 10};
   static int iconY = STATUS_BAR_Y_OFFSET;
 
   static const unsigned char* icons[ICON_NUM] = {
-    bitmap_icon_dialog,  
-    bitmap_icon_list,     
-    bitmap_icon_antenna,             
+    bitmap_icon_dialog,
+    bitmap_icon_list,
+    bitmap_icon_antenna,
     bitmap_icon_power,
     bitmap_icon_go_back // Added back icon
   };
@@ -2404,7 +2456,7 @@ void runUI() {
     tft.fillRect(0, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH, STATUS_BAR_HEIGHT, DARK_GRAY);
     for (int i = 0; i < ICON_NUM; i++) {
       if (icons[i] != NULL) {
-        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
       }
     }
     tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
@@ -2412,17 +2464,17 @@ void runUI() {
   }
 
   static unsigned long lastAnimationTime = 0;
-  static int animationState = 0;  
+  static int animationState = 0;
   static int activeIcon = -1;
   static unsigned long lastSpamTime = 0;
 
   switch (animationState) {
-    case 0: 
+    case 0:
       break;
 
-    case 1: 
+    case 1:
       if (millis() - lastAnimationTime >= 150) {
-        tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, UI_CYAN);
         animationState = 2;
         lastAnimationTime = millis();
       }
@@ -2435,7 +2487,7 @@ void runUI() {
       }
       break;
 
-    case 3: 
+    case 3:
       switch (activeIcon) {
         case 0:
           currentScreen = KEYBOARD;
@@ -2479,7 +2531,7 @@ void runUI() {
 
 
   static unsigned long lastTouchCheck = 0;
-  const unsigned long touchCheckInterval = 50;  
+  const unsigned long touchCheckInterval = 50;
 
   if (millis() - lastTouchCheck >= touchCheckInterval) {
     if (ts.touched() && feature_active) {
@@ -2515,7 +2567,7 @@ void runUI() {
 
 void cportalSetup() {
 
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
   tft.fillRect(0, 37, 240, 320, TFT_BLACK);
 
   uiDrawn = false;
@@ -2542,11 +2594,11 @@ void cportalSetup() {
 
 void cportalLoop() {
 
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
 
   updateStatusBar();
   runUI();
-  
+
   if (attackActive) {
     dnsServer.processNextRequest();
     server.handleClient();
@@ -2561,20 +2613,21 @@ void cportalLoop() {
       }
     }
   }
-} 
+}
 
 
 /*
- * 
- * 
+ *
+ *
  * Deauther
- * 
- * 
+ *
+ *
 */
 
 namespace Deauther {
 
 #define SCREEN_WIDTH  240
+#undef SCREEN_HEIGHT
 #define SCREEN_HEIGHT 320
 
 // Deauthentication frame template
@@ -2603,7 +2656,7 @@ uint32_t last_packet_time = 0;
 int current_page = 0;
 int highlightedIndex = 0;  // For button navigation
 const int networks_per_page = 14;
-int packets_per_burst = 10;  // Configurable packets per burst (default 10) 
+int packets_per_burst = 10;  // Configurable packets per burst (default 10)
 
 // Override Wi-Fi sanity check
 extern "C" int ieee80211_raw_frame_sanity_check(int32_t arg, int32_t arg2, int32_t arg3) {
@@ -2661,13 +2714,13 @@ int compare_ap(const void *a, const void *b) {
 void drawButton(int x, int y, int w, int h, const char* label, bool highlight, bool disabled) {
     uint16_t color = disabled ? DARK_GRAY : (highlight ? DARK_GRAY : ORANGE);
     tft.fillRect(x, y, w, h, color);
-    tft.drawRect(x, y, w, h, WHITE); 
+    tft.drawRect(x, y, w, h, WHITE);
     tft.setTextColor(WHITE);
-    tft.setTextSize(0); 
+    tft.setTextSize(0);
 
-    int16_t textWidth = strlen(label) * 6; 
+    int16_t textWidth = strlen(label) * 6;
     int16_t textX = x + (w - textWidth) / 2;
-    int16_t textY = y + (h - 6) / 2; 
+    int16_t textY = y + (h - 6) / 2;
     tft.setCursor(textX, textY);
     tft.println(label);
 }
@@ -2688,7 +2741,7 @@ void drawTabBar(const char* leftButton, bool leftDisabled, const char* prevButto
 }
 
 void drawScanScreen() {
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
     tft.fillRect(0, 37, 240, 320, TFT_BLACK);
     tft.setTextFont(1);
     tft.setTextSize(1);
@@ -2753,7 +2806,7 @@ void drawScanScreen() {
     }
 
     const char* leftButton = attack_running ? "Stop Attack" : "Rescan";
-    bool leftDisabled = false; 
+    bool leftDisabled = false;
     const char* prevButton = "Prev";
     bool prevDisabled = attack_running || current_page == 0;
     const char* nextButton = "Next";
@@ -2763,7 +2816,7 @@ void drawScanScreen() {
 
 bool scanNetworks() {
     scanning = true;
-    current_page = 0; 
+    current_page = 0;
     drawScanScreen();
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
@@ -2828,62 +2881,62 @@ void resetWifi() {
     consecutive_failures = 0;
 }
 
-// Skull spinner state
-int skullFrame = 0;
+// Icon spinner state
+int spinnerFrame = 0;
 
-// All 8 skull menu icons in array
-const unsigned char* skullIcons[] = {
-    bitmap_icon_skull_wifi,
-    bitmap_icon_skull_bluetooth,
-    bitmap_icon_skull_jammer,
-    bitmap_icon_skull_subghz,
-    bitmap_icon_skull_ir,
-    bitmap_icon_skull_tools,
-    bitmap_icon_skull_setting,
-    bitmap_icon_skull_about
+// Same 8 icons used for the top-level menu badges (quetzal.ino bitmap_icons[]).
+const unsigned char* spinnerIcons[] = {
+    bitmap_icon_wifi,
+    bitmap_icon_ble,
+    bitmap_icon_signals,
+    bitmap_icon_antenna,
+    bitmap_icon_flash,
+    bitmap_icon_bash,
+    bitmap_icon_setting,
+    bitmap_icon_question
 };
-const int numSkulls = 8;
+const int numSpinnerIcons = 8;
 
-// Draw row of skulls that flash in sequence - teal to pink wave
-void drawSkullSpinner() {
-    const int startX = 28;  // Center 8 skulls (8*16=128, (240-128)/2 = 56, but tighter)
-    const int skullY = 195;
+// Draw row of icons that flash in sequence - teal to pink wave
+void drawIconSpinner() {
+    const int startX = 28;  // Center 8 icons (8*16=128, (240-128)/2 = 56, but tighter)
+    const int iconY = 195;
     const int spacing = 26;  // 16px icon + 10px gap
 
     if (attack_running) {
-        // Wave effect - each skull gets a different phase
-        for (int i = 0; i < numSkulls; i++) {
-            int phase = (skullFrame + i) % 8;
+        // Wave effect - each icon gets a different phase
+        for (int i = 0; i < numSpinnerIcons; i++) {
+            int phase = (spinnerFrame + i) % 8;
 
             // Gradient from teal to pink based on phase
-            uint16_t skullColor;
+            uint16_t iconColor;
             if (phase < 4) {
                 // Teal to pink transition
                 float ratio = phase / 3.0f;
                 uint8_t r = (uint8_t)(ratio * 255);
                 uint8_t g = 207 - (uint8_t)(ratio * (207 - 28));
                 uint8_t b = 255 - (uint8_t)(ratio * (255 - 82));
-                skullColor = tft.color565(r, g, b);
+                iconColor = tft.color565(r, g, b);
             } else {
                 // Pink to teal transition
                 float ratio = (phase - 4) / 3.0f;
                 uint8_t r = 255 - (uint8_t)(ratio * 255);
                 uint8_t g = 28 + (uint8_t)(ratio * (207 - 28));
                 uint8_t b = 82 + (uint8_t)(ratio * (255 - 82));
-                skullColor = tft.color565(r, g, b);
+                iconColor = tft.color565(r, g, b);
             }
 
             int x = startX + (i * spacing);
-            tft.fillRect(x, skullY, 16, 16, TFT_BLACK);
-            tft.drawBitmap(x, skullY, skullIcons[i], 16, 16, skullColor);
+            tft.fillRect(x, iconY, 16, 16, TFT_BLACK);
+            tft.drawBitmap(x, iconY, spinnerIcons[i], 16, 16, iconColor);
         }
-        skullFrame++;
+        spinnerFrame++;
     } else {
         // Idle - all gray
-        for (int i = 0; i < numSkulls; i++) {
+        for (int i = 0; i < numSpinnerIcons; i++) {
             int x = startX + (i * spacing);
-            tft.fillRect(x, skullY, 16, 16, TFT_BLACK);
-            tft.drawBitmap(x, skullY, skullIcons[i], 16, 16, DARK_GRAY);
+            tft.fillRect(x, iconY, 16, 16, TFT_BLACK);
+            tft.drawBitmap(x, iconY, spinnerIcons[i], 16, 16, DARK_GRAY);
         }
     }
 }
@@ -2928,7 +2981,7 @@ void updateAttackStats() {
 }
 
 void drawAttackScreen() {
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
     tft.fillRect(0, 37, 240, 320, TFT_BLACK);
     tft.setTextSize(1);
 
@@ -3001,7 +3054,7 @@ void drawAttackScreen() {
     tft.print("+");
 
     // Skull activity indicator
-    drawSkullSpinner();
+    drawIconSpinner();
     drawSpinnerLabel();
 
     const char* buttons[] = {attack_running ? "Stop" : "Start", "Back"};
@@ -3053,7 +3106,7 @@ void handleTouch() {
                         drawScanScreen();
                     }
                     redraw = true;
-                } 
+                }
             } else {
                 // Touch zones: Rescan: x=0-57, Prev: x=117-174, Next: x=177-234
                 if (x >= 0 && x <= 57) {
@@ -3121,7 +3174,7 @@ void handleTouch() {
                     success_count = 0;
                     consecutive_failures = 0;
                     last_packet_time = 0;
-                    skullFrame = 0;
+                    spinnerFrame = 0;
                 } else {
                     // Stopping attack
                     last_packet_time = 0;
@@ -3246,12 +3299,13 @@ void runUI() {
 #define STATUS_BAR_Y_OFFSET 20
 #define STATUS_BAR_HEIGHT 16
 #define ICON_SIZE 16
+#undef ICON_NUM
 #define ICON_NUM 2
 
   static int iconX[ICON_NUM] = {220, 10};
   static int iconY = STATUS_BAR_Y_OFFSET;
 
-  static const unsigned char* icons[ICON_NUM] = {             
+  static const unsigned char* icons[ICON_NUM] = {
     bitmap_icon_undo,
     bitmap_icon_go_back // Added back icon
   };
@@ -3260,7 +3314,7 @@ void runUI() {
     tft.fillRect(0, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH, STATUS_BAR_HEIGHT, DARK_GRAY);
     for (int i = 0; i < ICON_NUM; i++) {
       if (icons[i] != NULL) {
-        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
       }
     }
     tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
@@ -3268,17 +3322,17 @@ void runUI() {
   }
 
   static unsigned long lastAnimationTime = 0;
-  static int animationState = 0;  
+  static int animationState = 0;
   static int activeIcon = -1;
   static unsigned long lastSpamTime = 0;
 
   switch (animationState) {
-    case 0: 
+    case 0:
       break;
 
-    case 1: 
+    case 1:
       if (millis() - lastAnimationTime >= 150) {
-        tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, UI_CYAN);
         animationState = 2;
         lastAnimationTime = millis();
       }
@@ -3291,7 +3345,7 @@ void runUI() {
       }
       break;
 
-    case 3: 
+    case 3:
       switch (activeIcon) {
         case 0:
           if (scanNetworks()) {
@@ -3311,7 +3365,7 @@ void runUI() {
   }
 
   static unsigned long lastTouchCheck = 0;
-  const unsigned long touchCheckInterval = 50;  
+  const unsigned long touchCheckInterval = 50;
 
   if (millis() - lastTouchCheck >= touchCheckInterval) {
     if (ts.touched() && feature_active) {
@@ -3340,16 +3394,16 @@ void runUI() {
 void deautherSetup() {
 
     tft.fillRect(0, 37, 240, 320, TFT_BLACK);
-    
+
     setupTouchscreen();
     uiDrawn = false;
-  
+
     float currentBatteryVoltage = readBatteryVoltage();
     drawStatusBar(currentBatteryVoltage, false);
     runUI();
 
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
-    
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
+
     tft.setTextColor(GREEN, BLACK);
     tft.setTextSize(1);
     tft.setCursor(10, 50);
@@ -3407,8 +3461,8 @@ void deautherSetup() {
 
     // Set up AP configuration
     wifi_config_t ap_config = {0};
-    strncpy((char*)ap_config.ap.ssid, "ESP32DIV", sizeof(ap_config.ap.ssid));
-    ap_config.ap.ssid_len = strlen("ESP32DIV");
+    strncpy((char*)ap_config.ap.ssid, "QUETZAL", sizeof(ap_config.ap.ssid));
+    ap_config.ap.ssid_len = strlen("QUETZAL");
     strncpy((char*)ap_config.ap.password, "deauth123", sizeof(ap_config.ap.password));
     ap_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
     ap_config.ap.ssid_hidden = 0;
@@ -3429,14 +3483,14 @@ void deautherSetup() {
 
 void deautherLoop() {
 
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
 
     handleTouch();
     handleButtons();  // Button navigation support
     updateStatusBar();
     runUI();
 
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
 
     // Packet transmission
     uint32_t current_time = millis();
@@ -3476,7 +3530,7 @@ void deautherLoop() {
     // Skull spinner - pulse every 500ms
     static uint32_t last_anim_time = 0;
     if (attack_running && current_time - last_anim_time > 500) {
-        drawSkullSpinner();
+        drawIconSpinner();
         last_anim_time = current_time;
     }
 
@@ -3491,11 +3545,11 @@ void deautherLoop() {
 
 
 /*
- * 
- * 
+ *
+ *
  * Firmware Update
- * 
- * 
+ *
+ *
 */
 
 namespace FirmwareUpdate {
@@ -3506,6 +3560,7 @@ namespace FirmwareUpdate {
 const char* host = "esp32";
 
 #define SCREEN_WIDTH 240
+#undef SCREEN_HEIGHT
 #define SCREEN_HEIGHT 320
 
 #define BUTTON_WIDTH 230
@@ -3522,10 +3577,11 @@ const char* host = "esp32";
 #define TAB_RIGHT_X 177
 #define TAB_Y 304
 
-#define TS_MIN_X 300
-#define TS_MAX_X 3800
-#define TS_MIN_Y 300
-#define TS_MAX_Y 3800
+// TS_MINX/TS_MAXX/TS_MINY/TS_MAXY (Touchscreen.h) are the shared, calibratable
+// touch bounds used everywhere else in the firmware - this namespace used to
+// have its own separate, hardcoded, never-recalibrated copy of the same
+// constants under different names; folded into the shared ones so Update
+// Firmware's touch handling benefits from TouchCalibration too.
 
 #define NETWORKS_PER_PAGE 15
 #define NETWORK_Y_START 70
@@ -3549,12 +3605,56 @@ typedef struct {
   uint8_t authmode;
 } NetworkInfo;
 
-const char* keyboardLayout[] = {
+// Sentinel bytes for the SHIFT and page-toggle keys - values that can never
+// appear as real printable characters, so they're safe to mix into the
+// layout strings alongside actual keys.
+#define KB_SHIFT '\x01'
+#define KB_PAGE  '\x02'
+
+const char* kbLettersLower[4] = {
+  "1234567890",
+  "qwertyuiop",
+  "asdfghjkl",
+  "\x01zxcvbnm\x02",
+};
+const char* kbLettersUpper[4] = {
   "1234567890",
   "QWERTYUIOP",
   "ASDFGHJKL",
-  "ZXCVBNM!@#"
+  "\x01ZXCVBNM\x02",
 };
+// Symbols page - digits stay visible here too (convenient, and passwords
+// with digits are common), plus everything from ! through ~ that's likely
+// to show up in a real WPA2 passphrase.
+const char* kbSymbols[4] = {
+  "1234567890",
+  "!@#$%^&*()",
+  "-_=+[]{};:",
+  "\x02,./<>?\\|~",
+};
+
+bool kbShiftActive = false;
+bool kbSymbolsPage = false;
+const char* keyboardLayout[4];  // filled by applyKeyboardLayout()
+
+void applyKeyboardLayout() {
+  const char** src = kbSymbolsPage ? kbSymbols : (kbShiftActive ? kbLettersUpper : kbLettersLower);
+  for (int i = 0; i < 4; i++) keyboardLayout[i] = src[i];
+}
+
+// Draws a key's face: SHIFT/page-toggle get short text labels (their raw
+// byte isn't printable) instead of the literal character, and SHIFT is
+// highlighted while active.
+String keyLabel(char c) {
+  if (c == KB_SHIFT) return "SH";
+  if (c == KB_PAGE) return kbSymbolsPage ? "AB" : "12";
+  return String(c);
+}
+
+uint16_t keyRestColor(char c) {
+  if (c == KB_SHIFT && kbShiftActive) return UI_AMBER;
+  return TFT_DARKGREY;
+}
 
 void drawButton(int x, int y, int w, int h, const char* label, bool highlight, bool disabled);
 void drawTabBar(const char* leftButton, bool leftDisabled, const char* prevButton, bool prevDisabled, const char* nextButton, bool nextDisabled);
@@ -3568,103 +3668,6 @@ void drawInputField();
 void drawKeyboard();
 bool enterWiFiPassword();
 void performWebOTAUpdate();
-
-const char* loginIndex = R"(
-<!DOCTYPE html>
-<html lang='en'>
-<head>
-    <meta charset='UTF-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <title>ESP32 Login Page</title>
-    <style>
-        body {
-            background-color: #1A1A1A;
-            color: #E0E0E0;
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .container {
-            background-color: #2A2A2A;
-            padding: 2rem;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-        }
-        h2 {
-            margin-bottom: 1.5rem;
-            font-size: 1.8rem;
-            color: #FFFFFF;
-        }
-        .form-group {
-            margin-bottom: 1.5rem;
-            text-align: left;
-        }
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-size: 1rem;
-            color: #E0E0E0;
-        }
-        input[type='text'],
-        input[type='password'] {
-            width: 100%;
-            padding: 0.8rem;
-            border: 1px solid #4A4A4A;
-            border-radius: 5px;
-            background-color: #3A3A3A;
-            color: #E0E0E0;
-            font-size: 1rem;
-            box-sizing: border-box;
-        }
-        input[type='submit'] {
-            width: 100%;
-            padding: 0.8rem;
-            border: none;
-            border-radius: 5px;
-            background-color: #FFE221;
-            color: #1A1A1A;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        input[type='submit']:hover {
-            background-color: #FFF14A;
-        }
-    </style>
-</head>
-<body>
-    <div class='container'>
-        <h2>ESP32 Login Page</h2>
-        <form name='loginForm'>
-            <div class='form-group'>
-                <label for='userid'>Username:</label>
-                <input type='text' name='userid' id='userid'>
-            </div>
-            <div class='form-group'>
-                <label for='pwd'>Password:</label>
-                <input type='password' name='pwd' id='pwd'>
-            </div>
-            <input type='submit' onclick='check(this.form); return false;' value='Login'>
-        </form>
-    </div>
-    <script>
-        function check(form) {
-            if (form.userid.value == 'admin' && form.pwd.value == 'admin') {
-                window.open('/serverIndex');
-            } else {
-                alert('Error Password or Username');
-            }
-        }
-    </script>
-</body>
-</html>
-)";
 
 const char* serverIndex = R"(
 <!DOCTYPE html>
@@ -3815,12 +3818,13 @@ void runUI() {
 #define STATUS_BAR_Y_OFFSET 20
 #define STATUS_BAR_HEIGHT 16
 #define ICON_SIZE 16
+#undef ICON_NUM
 #define ICON_NUM 1
 
   static int iconX[ICON_NUM] = {10};
   static int iconY = STATUS_BAR_Y_OFFSET;
 
-  static const unsigned char* icons[ICON_NUM] = {             
+  static const unsigned char* icons[ICON_NUM] = {
     bitmap_icon_go_back // Added back icon
   };
 
@@ -3828,7 +3832,7 @@ void runUI() {
     tft.fillRect(0, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH, STATUS_BAR_HEIGHT, DARK_GRAY);
     for (int i = 0; i < ICON_NUM; i++) {
       if (icons[i] != NULL) {
-        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
       }
     }
     tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, ORANGE);
@@ -3836,17 +3840,17 @@ void runUI() {
   }
 
   static unsigned long lastAnimationTime = 0;
-  static int animationState = 0;  
+  static int animationState = 0;
   static int activeIcon = -1;
   static unsigned long lastSpamTime = 0;
 
   switch (animationState) {
-    case 0: 
+    case 0:
       break;
 
-    case 1: 
+    case 1:
       if (millis() - lastAnimationTime >= 150) {
-        tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, SHREDDY_TEAL);
+        tft.drawBitmap(iconX[activeIcon], iconY, icons[activeIcon], ICON_SIZE, ICON_SIZE, UI_CYAN);
         animationState = 2;
         lastAnimationTime = millis();
       }
@@ -3859,7 +3863,7 @@ void runUI() {
       }
       break;
 
-    case 3: 
+    case 3:
       switch (activeIcon) {
          case 0: // Back icon action (exit to submenu)
            feature_exit_requested = true;
@@ -3871,7 +3875,7 @@ void runUI() {
   }
 
   static unsigned long lastTouchCheck = 0;
-  const unsigned long touchCheckInterval = 50;  
+  const unsigned long touchCheckInterval = 50;
 
   if (millis() - lastTouchCheck >= touchCheckInterval) {
     if (ts.touched() && feature_active) {
@@ -3901,8 +3905,8 @@ void runUI() {
 void drawButton(int x, int y, int w, int h, const char* label, bool highlight, bool disabled) {
   uint16_t color = disabled ? TFT_DARKGREY : (highlight ? TFT_DARKGREY : ORANGE);
   tft.fillRect(x, y, w, h, color);
-  tft.drawRect(x, y, w, h, SHREDDY_TEAL);
-  tft.setTextColor(SHREDDY_TEAL);
+  tft.drawRect(x, y, w, h, UI_CYAN);
+  tft.setTextColor(UI_CYAN);
   tft.setTextSize(0);
 
   int16_t textWidth = strlen(label) * 6;
@@ -3927,7 +3931,7 @@ void drawTabBar(const char* leftButton, bool leftDisabled, const char* prevButto
 }
 
 void drawMenu() {
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
   tft.fillRect(0, 37, 240, 320, TFT_BLACK);
 
   tft.setTextSize(1);
@@ -3956,7 +3960,7 @@ void performSDUpdate() {
   uiDrawn = false;
   tft.fillRect(0, 37, 240, 320, TFT_BLACK);
   tft.setCursor(10, 10 + yshift);
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(1);
   tft.println("SD Update");
   tft.setTextColor(TFT_YELLOW, TFT_BLACK);
@@ -3970,12 +3974,12 @@ void performSDUpdate() {
   drawTabBar("Start", false, "", false, "Back", false);
 
   bool waitingForStart = true;
-  
+
   while (waitingForStart) {
     if (ts.touched()) {
       TS_Point p = ts.getPoint();
-      int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-      int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+      int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+      int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
       if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
         drawMenu();
         return;
@@ -3989,7 +3993,7 @@ void performSDUpdate() {
 
   tft.fillRect(0, 37, 240, 320, TFT_BLACK);
   tft.setCursor(10, 10 + yshift);
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(1);
   tft.println("Starting SD Update...");
   drawTabBar("", false, "", false, "Back", false);
@@ -3998,8 +4002,8 @@ void performSDUpdate() {
   while (proceed) {
     if (ts.touched()) {
       TS_Point p = ts.getPoint();
-      int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-      int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+      int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+      int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
       if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
         drawMenu();
         return;
@@ -4007,13 +4011,29 @@ void performSDUpdate() {
       delay(50);
     }
 
-    // Release GPIO 5 from NRF24 before SD card init (pin conflict resolution)
+    // Release the shared SPI bus from NRF24 before SD card init (pin conflict resolution)
     cleanupNRF24();
 
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+    // touchscreenSPI and the global SPI object are two separate SPIClass
+    // instances, but on the C5 both map to the same (only) physical SPI
+    // peripheral (FSPI) - release touch's claim first or the SPI.begin()
+    // below tries to claim an already-initialized bus and silently fails.
+    touchscreenSPI.end();
+    delay(10);
+
+    // cleanupNRF24() calls SPI.end(), so the bus must be re-initialized with the
+    // board's shared-SPI pins before SD.begin() runs. Without this, SD.begin()'s
+    // implicit SPI.begin() falls back to the framework's default pins, which only
+    // happen to match the wiring on the original board (VSPI 18/19/23) and not on
+    // boards with a custom shared bus (e.g. NM-CYD-C5: SCK 6 / MISO 2 / MOSI 7).
+    SPI.begin(BOARD_RADIO_SCK, BOARD_RADIO_MISO, BOARD_RADIO_MOSI, BOARD_SD_CS);
+
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
     tft.setCursor(10, 30 + yshift);
     tft.println("Initializing SD...");
-    if (!SD.begin(SD_CS_PIN)) {
+    bool sdOk = SD.begin(SD_CS_PIN);
+    setupTouchscreen();  // restore touch's claim on the shared bus either way
+    if (!sdOk) {
       tft.setTextColor(ORANGE, TFT_BLACK);
       tft.setCursor(10, 40 + yshift);
       tft.println("X SD init failed!");
@@ -4021,15 +4041,15 @@ void performSDUpdate() {
       tft.println("Touch to retry or Back");
       waitForTouch();
       TS_Point p = ts.getPoint();
-      int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-      int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+      int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+      int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
       if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
         drawMenu();
         return;
       }
       tft.fillRect(0, 37, 240, 320, TFT_BLACK);
       tft.setCursor(10, 10 + yshift);
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+      tft.setTextColor(UI_CYAN, TFT_BLACK);
       tft.println("Starting SD Update...");
       drawTabBar("", false, "", false, "Back", false);
       continue;
@@ -4046,15 +4066,15 @@ void performSDUpdate() {
       tft.println("Touch to retry or Back");
       waitForTouch();
       TS_Point p = ts.getPoint();
-      int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-      int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+      int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+      int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
       if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
         drawMenu();
         return;
       }
       tft.fillRect(0, 37, 240, 320, TFT_BLACK);
       tft.setCursor(10, 10 + yshift);
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+      tft.setTextColor(UI_CYAN, TFT_BLACK);
       tft.println("Starting SD Update...");
       drawTabBar("", false, "", false, "Back", false);
       continue;
@@ -4069,22 +4089,22 @@ void performSDUpdate() {
       tft.println("Touch to retry or Back");
       waitForTouch();
       TS_Point p = ts.getPoint();
-      int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-      int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+      int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+      int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
       if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
         drawMenu();
         return;
       }
       tft.fillRect(0, 37, 240, 320, TFT_BLACK);
       tft.setCursor(10, 10 + yshift);
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+      tft.setTextColor(UI_CYAN, TFT_BLACK);
       tft.println("Starting SD Update...");
       drawTabBar("", false, "", false, "Back", false);
       continue;
     }
 
     size_t fileSize = firmwareFile.size();
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
     tft.setCursor(10, 50 + yshift);
     tft.printf("Size: %u bytes\n", fileSize);
     if (!Update.begin(fileSize)) {
@@ -4095,21 +4115,21 @@ void performSDUpdate() {
       tft.println("Touch to retry or Back");
       waitForTouch();
       TS_Point p = ts.getPoint();
-      int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-      int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+      int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+      int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
       if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
         drawMenu();
         return;
       }
       tft.fillRect(0, 37, 240, 320, TFT_BLACK);
       tft.setCursor(10, 10 + yshift);
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+      tft.setTextColor(UI_CYAN, TFT_BLACK);
       tft.println("Starting SD Update...");
       drawTabBar("", false, "", false, "Back", false);
       continue;
     }
 
-    tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
     tft.setCursor(10, 60 + yshift);
     tft.println("Updating...");
     size_t written = Update.writeStream(firmwareFile);
@@ -4121,15 +4141,15 @@ void performSDUpdate() {
       tft.println("Touch to retry or Back");
       waitForTouch();
       TS_Point p = ts.getPoint();
-      int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-      int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+      int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+      int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
       if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
         drawMenu();
         return;
       }
       tft.fillRect(0, 37, 240, 320, TFT_BLACK);
       tft.setCursor(10, 10 + yshift);
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+      tft.setTextColor(UI_CYAN, TFT_BLACK);
       tft.println("Starting SD Update...");
       drawTabBar("", false, "", false, "Back", false);
       continue;
@@ -4139,7 +4159,7 @@ void performSDUpdate() {
     tft.setCursor(10, 20 + yshift);
     tft.println("Update OK!");
     if (Update.end(true)) {
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+      tft.setTextColor(UI_CYAN, TFT_BLACK);
       tft.setCursor(10, 30 + yshift);
       tft.println("Rebooting...");
       delay(2000);
@@ -4152,15 +4172,15 @@ void performSDUpdate() {
       tft.println("Touch to retry or Back");
       waitForTouch();
       TS_Point p = ts.getPoint();
-      int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-      int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+      int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+      int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
       if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
         drawMenu();
         return;
       }
       tft.fillRect(0, 37, 240, 320, TFT_BLACK);
       tft.setCursor(10, 10 + yshift);
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+      tft.setTextColor(UI_CYAN, TFT_BLACK);
       tft.println("Starting SD Update...");
       drawTabBar("", false, "", false, "Back", false);
       continue;
@@ -4174,7 +4194,7 @@ void performSDUpdate() {
 bool selectWiFiNetwork() {
   uiDrawn = false;
   tft.fillRect(0, 37, 240, 320, TFT_BLACK);
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
   tft.setCursor(10, 50);
   tft.setTextColor(GREEN);
   tft.setTextSize(1);
@@ -4186,7 +4206,7 @@ bool selectWiFiNetwork() {
   int numNetworks = WiFi.scanNetworks();
   if (numNetworks <= 0) {
     tft.fillRect(0, 37, 240, 320, TFT_BLACK);
-    tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+    tft.drawLine(0, 19, 240, 19, UI_CYAN);
     tft.setTextColor(GREEN);
     tft.setCursor(10, 50);
     tft.println("No networks found.");
@@ -4197,8 +4217,8 @@ bool selectWiFiNetwork() {
       delay(10);
     }
     TS_Point p = ts.getPoint();
-    int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-    int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+    int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+    int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
     delay(200);
     if (x >= TAB_LEFT_X && x < TAB_LEFT_X + TAB_BUTTON_WIDTH && y >= TAB_Y && y < TAB_Y + TAB_BUTTON_HEIGHT) {
       return selectWiFiNetwork();
@@ -4224,8 +4244,8 @@ bool selectWiFiNetwork() {
       delay(10);
     }
     TS_Point p = ts.getPoint();
-    int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-    int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+    int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+    int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
     delay(200);
 
     int y_pos = NETWORK_Y_START;
@@ -4244,7 +4264,7 @@ bool selectWiFiNetwork() {
         tft.setCursor(10, y_pos);
         tft.println(buf);
         delay(100);
-        tft.setTextColor(i == selectedIndex ? ORANGE : (networks[i].authmode == WIFI_AUTH_OPEN ? ORANGE : SHREDDY_TEAL), TFT_BLACK);
+        tft.setTextColor(i == selectedIndex ? UI_AMBER : (networks[i].authmode == WIFI_AUTH_OPEN ? ORANGE : UI_CYAN), TFT_BLACK);
         tft.setCursor(10, y_pos);
         tft.println(buf);
         selectedIndex = i;
@@ -4280,7 +4300,7 @@ bool selectWiFiNetwork() {
 
 void drawNetworkList(int startIndex, int numNetworks, NetworkInfo* networks, int selectedIndex) {
   uiDrawn = false;
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
   tft.fillRect(0, 37, 240, 320, TFT_BLACK);
   tft.setTextFont(1);
   tft.setTextSize(1);
@@ -4308,7 +4328,7 @@ void drawNetworkList(int startIndex, int numNetworks, NetworkInfo* networks, int
       const char* enc = networks[i].authmode == WIFI_AUTH_OPEN ? "OPEN" : "WPA2";
       snprintf(buf, sizeof(buf), "%02d: %-15s %3d dBm Ch%2d %s", i + 1, ssid, networks[i].rssi, networks[i].channel, enc);
       tft.setCursor(10, y);
-      tft.setTextColor(i == selectedIndex ? ORANGE : (networks[i].authmode == WIFI_AUTH_OPEN ? ORANGE : SHREDDY_TEAL));
+      tft.setTextColor(i == selectedIndex ? UI_AMBER : (networks[i].authmode == WIFI_AUTH_OPEN ? ORANGE : UI_CYAN));
       tft.println(buf);
       y += NETWORK_ROW_HEIGHT;
     }
@@ -4329,7 +4349,7 @@ void drawNetworkList(int startIndex, int numNetworks, NetworkInfo* networks, int
 
 void drawInputField() {
   tft.fillRect(0, 37, 240, 20, TFT_BLACK);
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(1);
   tft.setCursor(1, 40);
   tft.print("Password: ");
@@ -4342,13 +4362,13 @@ void drawInputField() {
 void drawKeyboard() {
   tft.fillRect(0, 37, 240, 320, TFT_BLACK);
 
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(1);
   //tft.setCursor(1, 10);
   //tft.printf("Enter Password for %s", selectedSSID);
 
   tft.fillRect(0, 37, 240, 20, TFT_BLACK);
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(1);
   tft.setCursor(1, 44);
   tft.print("Password: ");
@@ -4361,11 +4381,12 @@ void drawKeyboard() {
   for (int row = 0; row < 4; row++) {
     int xOffset = 10;
     for (int col = 0; col < strlen(keyboardLayout[row]); col++) {
-      tft.fillRect(xOffset, yOffset, KEY_WIDTH, KEY_HEIGHT, TFT_DARKGREY);
-      tft.setTextColor(SHREDDY_TEAL);
+      char c = keyboardLayout[row][col];
+      tft.fillRect(xOffset, yOffset, KEY_WIDTH, KEY_HEIGHT, keyRestColor(c));
+      tft.setTextColor(UI_CYAN);
       tft.setTextSize(1);
-      tft.setCursor(xOffset + 5, yOffset + 4);
-      tft.print(keyboardLayout[row][col]);
+      tft.setCursor(xOffset + 3, yOffset + 4);
+      tft.print(keyLabel(c));
       xOffset += KEY_WIDTH + KEY_SPACING;
     }
     yOffset += KEY_HEIGHT + KEY_SPACING;
@@ -4403,7 +4424,7 @@ void drawKeyboard() {
 
 void updateInputField() {
   tft.fillRect(0, 37, 240, 20, TFT_BLACK);
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(1);
   tft.setCursor(1, 44);
   tft.print("Password: ");
@@ -4415,6 +4436,9 @@ void updateInputField() {
 
 bool enterWiFiPassword() {
   wifiPassword[0] = '\0';
+  kbShiftActive = false;
+  kbSymbolsPage = false;
+  applyKeyboardLayout();
   drawKeyboard();
 
   bool done = false;
@@ -4423,8 +4447,8 @@ bool enterWiFiPassword() {
       delay(10);
     }
     TS_Point p = ts.getPoint();
-    int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-    int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+    int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+    int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
     delay(200);
 
     int yOffset = KEYBOARD_Y_OFFSET_START;
@@ -4434,29 +4458,32 @@ bool enterWiFiPassword() {
         if (x >= xOffset && x < xOffset + KEY_WIDTH && y >= yOffset && y < yOffset + KEY_HEIGHT) {
           char c = keyboardLayout[row][col];
           tft.fillRect(xOffset, yOffset, KEY_WIDTH, KEY_HEIGHT, ORANGE);
-          tft.setTextColor(SHREDDY_TEAL);
+          tft.setTextColor(UI_CYAN);
           tft.setTextSize(1);
-          tft.setCursor(xOffset + 5, yOffset + 4);
-          tft.print(c);
+          tft.setCursor(xOffset + 3, yOffset + 4);
+          tft.print(keyLabel(c));
           delay(100);
-          tft.fillRect(xOffset, yOffset, KEY_WIDTH, KEY_HEIGHT, TFT_DARKGREY);
-          tft.setTextColor(SHREDDY_TEAL);
-          tft.setCursor(xOffset + 5, yOffset + 4);
-          tft.print(c);
-          if (c == '<') {
-            if (strlen(wifiPassword) > 0) {
-              wifiPassword[strlen(wifiPassword) - 1] = '\0';
-            }
-          } else if (c == '-') {
-            wifiPassword[0] = '\0';
-          } else if (c != ' ') {
+
+          if (c == KB_SHIFT) {
+            kbShiftActive = !kbShiftActive;
+            applyKeyboardLayout();
+            drawKeyboard();
+          } else if (c == KB_PAGE) {
+            kbSymbolsPage = !kbSymbolsPage;
+            applyKeyboardLayout();
+            drawKeyboard();
+          } else {
+            tft.fillRect(xOffset, yOffset, KEY_WIDTH, KEY_HEIGHT, keyRestColor(c));
+            tft.setTextColor(UI_CYAN);
+            tft.setCursor(xOffset + 3, yOffset + 4);
+            tft.print(keyLabel(c));
             if (strlen(wifiPassword) < PASSWORD_MAX_LENGTH) {
               size_t len = strlen(wifiPassword);
               wifiPassword[len] = c;
               wifiPassword[len + 1] = '\0';
             }
+            updateInputField();
           }
-          updateInputField();
         }
         xOffset += KEY_WIDTH + KEY_SPACING;
       }
@@ -4477,7 +4504,7 @@ bool enterWiFiPassword() {
     if (x >= 165 && x < 235 && y >= 160 && y < 185) { // OK
       if (strlen(wifiPassword) > 0) {
         done = true;
-      } 
+      }
     }
   }
   return true;
@@ -4486,7 +4513,21 @@ bool enterWiFiPassword() {
 void performWebOTAUpdate() {
   uiDrawn = false;
   static size_t totalUploaded = 0;
-  bool inUpdate = false;
+  static bool inUpdate = false;
+  static bool uploadAuthorized = false;
+  static bool exitOta = false;
+  static bool otaRoutesRegistered = false;
+  static String otaPassword;
+
+  exitOta = false;
+
+  // Generate a fresh, non-derivable credential for every OTA session. MAC
+  // addresses are observable on the LAN and must not be used as passwords.
+  char password[34];
+  snprintf(password, sizeof(password), "Q%08lX%08lX%08lX%08lX",
+           (unsigned long)esp_random(), (unsigned long)esp_random(),
+           (unsigned long)esp_random(), (unsigned long)esp_random());
+  otaPassword = password;
 
   if (!selectWiFiNetwork()) {
     drawMenu();
@@ -4502,12 +4543,12 @@ void performWebOTAUpdate() {
   runUI();
   tft.fillRect(0, 37, 240, 320, TFT_BLACK);
   tft.setCursor(10, 10 + yshift);
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(1);
   tft.println("Starting Web OTA...");
   drawTabBar("", false, "", false, "Back", false);
 
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setCursor(10, 30 + yshift);
   tft.println("Connecting Wi-Fi");
   WiFi.begin(selectedSSID, wifiPassword);
@@ -4515,8 +4556,8 @@ void performWebOTAUpdate() {
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
     if (ts.touched()) {
       TS_Point p = ts.getPoint();
-      int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-      int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+      int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+      int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
       if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
         WiFi.disconnect();
         drawMenu();
@@ -4535,20 +4576,21 @@ void performWebOTAUpdate() {
     tft.println("Touch to retry or Back");
     waitForTouch();
     TS_Point p = ts.getPoint();
-    int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-    int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+    int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+    int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
     if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
       WiFi.disconnect();
       drawMenu();
       return;
     }
-    performWebOTAUpdate();
+    WiFi.disconnect();
+    drawMenu();
     return;
   }
   tft.setTextColor(TFT_YELLOW, TFT_BLACK);
   tft.setCursor(10, 40 + yshift);
   tft.println("Wi-Fi OK");
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setCursor(10, 50 + yshift);
   tft.print("IP: ");
   tft.println(WiFi.localIP());
@@ -4557,7 +4599,7 @@ void performWebOTAUpdate() {
   tft.setCursor(10, 80 + yshift);
   tft.println("User: admin");
   tft.setCursor(10, 90 + yshift);
-  tft.println("Pass: admin");
+  tft.println("Pass: " + otaPassword);
 
   if (!MDNS.begin(host)) {
     tft.setTextColor(ORANGE, TFT_BLACK);
@@ -4567,111 +4609,124 @@ void performWebOTAUpdate() {
     tft.println("Touch to retry or Back");
     waitForTouch();
     TS_Point p = ts.getPoint();
-    int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-    int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+    int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+    int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
     if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
       WiFi.disconnect();
       drawMenu();
       return;
     }
-    performWebOTAUpdate();
+    WiFi.disconnect();
+    drawMenu();
     return;
   }
   tft.setTextColor(TFT_YELLOW, TFT_BLACK);
   tft.setCursor(10, 110 + yshift);
   tft.println("mDNS OK");
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setCursor(10, 120 + yshift);
   tft.println("Web server ready!");
   tft.setCursor(10, 130 + yshift);
   tft.println("Access via browser");
 
-  server.on("/", HTTP_GET, []() {
-    server.sendHeader("Connection", "close");
-    server.send(200, "text/html", loginIndex);
-  });
-  server.on("/serverIndex", HTTP_GET, []() {
-    server.sendHeader("Connection", "close");
-    server.send(200, "text/html", serverIndex);
-  });
-  server.on("/update", HTTP_POST, []() {
-    server.sendHeader("Connection", "close");
-    bool success = !Update.hasError();
-    server.send(200, "text/plain", success ? "OK" : "FAIL");
-    if (success) {
-      tft.fillRect(0, 37, 240, 320, TFT_BLACK);
-      tft.setCursor(10, 10 + yshift);
-      tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-      tft.setTextSize(1);
-      tft.println("Update OK!");
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-      tft.setCursor(10, 20 + yshift);
-      tft.println("Rebooting...");
-      delay(2000);
-      ESP.restart();
-    } else {
-      tft.fillRect(0, 37, 240, 320, TFT_BLACK);
-      tft.setCursor(10, 10 + yshift);
-      tft.setTextColor(ORANGE, TFT_BLACK);
-      tft.println("X Update Failed!");
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-      tft.setCursor(10, 20 + yshift);
-      tft.println("Touch to retry or Back");
-      drawTabBar("", false, "", false, "Back", false);
-      waitForTouch();
-      TS_Point p = ts.getPoint();
-      int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-      int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
-      if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
-        server.close();
-        WiFi.disconnect();
-        drawMenu();
+  if (!otaRoutesRegistered) {
+    server.on("/", HTTP_GET, []() {
+      if (!server.authenticate("admin", otaPassword.c_str())) {
+        server.requestAuthentication();
         return;
       }
-      performWebOTAUpdate();
-    }
-  }, [&inUpdate, &totalUploaded]() {
-    HTTPUpload& upload = server.upload();
-    if (upload.status == UPLOAD_FILE_START) {
-      tft.fillRect(0, 37, 240, 320, TFT_BLACK);
-      tft.setCursor(10, 10 + yshift);
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-      tft.setTextSize(1);
-      tft.println("Web OTA Started...");
-      drawTabBar("", false, "", false, "Back", true);
-      totalUploaded = 0;
-      inUpdate = true;
-      if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-        Update.printError(Serial);
+      server.sendHeader("Connection", "close");
+      server.send(200, "text/html", serverIndex);
+    });
+    server.on("/serverIndex", HTTP_GET, []() {
+      if (!server.authenticate("admin", otaPassword.c_str())) {
+        server.requestAuthentication();
+        return;
       }
-    } else if (upload.status == UPLOAD_FILE_WRITE) {
-      if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-        Update.printError(Serial);
+      server.sendHeader("Connection", "close");
+      server.send(200, "text/html", serverIndex);
+    });
+    server.on("/update", HTTP_POST, []() {
+      if (!uploadAuthorized) {
+        server.requestAuthentication();
+        return;
       }
-      totalUploaded += upload.currentSize;
-      int percent = (totalUploaded * 100) / (upload.totalSize ? upload.totalSize : 1000000);
-      tft.setCursor(10, 30 + yshift);
-      tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
-      tft.printf("Progress: %d%%\n", percent);
-    } else if (upload.status == UPLOAD_FILE_END) {
-      if (Update.end(true)) {
-        Serial.printf("Update Success: %u\n", upload.totalSize);
+      server.sendHeader("Connection", "close");
+      bool success = !Update.hasError();
+      server.send(200, "text/plain", success ? "OK" : "FAIL");
+      if (success) {
+        tft.fillRect(0, 37, 240, 320, TFT_BLACK);
+        tft.setCursor(10, 10 + yshift);
+        tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+        tft.setTextSize(1);
+        tft.println("Update OK!");
+        tft.setTextColor(UI_CYAN, TFT_BLACK);
+        tft.setCursor(10, 20 + yshift);
+        tft.println("Rebooting...");
+        uploadAuthorized = false;
+        delay(2000);
+        ESP.restart();
       } else {
-        Update.printError(Serial);
+        tft.fillRect(0, 37, 240, 320, TFT_BLACK);
+        tft.setCursor(10, 10 + yshift);
+        tft.setTextColor(ORANGE, TFT_BLACK);
+        uploadAuthorized = false;
+        tft.println("X Update Failed!");
+        tft.setTextColor(UI_CYAN, TFT_BLACK);
+        tft.setCursor(10, 20 + yshift);
+        tft.println("Touch to return");
+        drawTabBar("", false, "", false, "Back", false);
+        waitForTouch();
+        exitOta = true;
       }
-      totalUploaded = 0;
-      inUpdate = false;
-    }
-  });
+    }, []() {
+      HTTPUpload& upload = server.upload();
+      if (upload.status == UPLOAD_FILE_START) {
+        uploadAuthorized = server.authenticate("admin", otaPassword.c_str());
+        if (!uploadAuthorized) return;
+        tft.fillRect(0, 37, 240, 320, TFT_BLACK);
+        tft.setCursor(10, 10 + yshift);
+        tft.setTextColor(UI_CYAN, TFT_BLACK);
+        tft.setTextSize(1);
+        tft.println("Web OTA Started...");
+        drawTabBar("", false, "", false, "Back", true);
+        totalUploaded = 0;
+        inUpdate = true;
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+          Update.printError(Serial);
+        }
+      } else if (!uploadAuthorized) {
+        return;
+      } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+          Update.printError(Serial);
+        }
+        totalUploaded += upload.currentSize;
+        int percent = (totalUploaded * 100) / (upload.totalSize ? upload.totalSize : 1000000);
+        tft.setCursor(10, 30 + yshift);
+        tft.setTextColor(UI_CYAN, TFT_BLACK);
+        tft.printf("Progress: %d%%\n", percent);
+      } else if (upload.status == UPLOAD_FILE_END) {
+        if (Update.end(true)) {
+          Serial.printf("Update Success: %u\n", upload.totalSize);
+        } else {
+          Update.printError(Serial);
+        }
+        totalUploaded = 0;
+        inUpdate = false;
+      }
+    });
+    otaRoutesRegistered = true;
+  }
 
   server.begin();
 
-  while (true) {
+  while (!exitOta) {
     server.handleClient();
     if (ts.touched() && !inUpdate) {
       TS_Point p = ts.getPoint();
-      int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-      int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+      int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+      int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
       if (checkButton(x, y, TAB_RIGHT_X, TAB_Y, TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT)) {
         server.close();
         WiFi.disconnect();
@@ -4682,16 +4737,20 @@ void performWebOTAUpdate() {
     }
     delay(1);
   }
+
+  server.close();
+  WiFi.disconnect();
+  drawMenu();
 }
 
 
 void updateSetup() {
-  
+
   tft.fillScreen(TFT_BLACK);
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
   //tft.fillRect(0, 37, 240, 320, TFT_BLACK);
 
-  tft.setTextColor(SHREDDY_TEAL, TFT_BLACK);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(0);
 
   setupTouchscreen();
@@ -4707,7 +4766,7 @@ void updateSetup() {
 
 void updateLoop() {
 
-  tft.drawLine(0, 19, 240, 19, SHREDDY_TEAL);
+  tft.drawLine(0, 19, 240, 19, UI_CYAN);
 
   updateStatusBar();
   runUI();
@@ -4715,8 +4774,8 @@ void updateLoop() {
   if (ts.touched()) {
     TS_Point p = ts.getPoint();
 
-    int16_t x = map(p.x, TS_MIN_X, TS_MAX_X, 0, SCREEN_WIDTH - 1);
-    int16_t y = map(p.y, TS_MAX_Y, TS_MIN_Y, 0, SCREEN_HEIGHT - 1);
+    int16_t x = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+    int16_t y = map(p.y, TS_MAXY, TS_MINY, 0, SCREEN_HEIGHT - 1);
 
     if (x > BUTTON1_X && x < BUTTON1_X + BUTTON_WIDTH && y > BUTTON1_Y && y < BUTTON1_Y + BUTTON_HEIGHT) {
       performSDUpdate();
@@ -4726,5 +4785,40 @@ void updateLoop() {
     }
     delay(200);
     }
-  }   
+  }
+
+// Reusable connect flow for other features (e.g. HostScanner): select an SSID,
+// enter its password, then WiFi.begin() and poll for a connection. Mirrors the
+// poll loop in performWebOTAUpdate() above, minus its own touch-cancel UI -
+// callers can offer their own cancel affordance before invoking this.
+bool connectToWiFiInteractive() {
+  if (!selectWiFiNetwork()) return false;
+  if (!enterWiFiPassword()) return false;
+
+  WiFi.begin(selectedSSID, wifiPassword);
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    attempts++;
+  }
+  return WiFi.status() == WL_CONNECTED;
+}
+
+// Same as connectToWiFiInteractive(), but the SSID is already known (e.g.
+// WifiScan's own scan results) - skips straight to password entry instead
+// of re-running selectWiFiNetwork()'s own scan+list UI.
+bool connectToKnownSSID(const char* ssid) {
+  strncpy(selectedSSID, ssid, 31);
+  selectedSSID[31] = '\0';
+  if (!enterWiFiPassword()) return false;
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(selectedSSID, wifiPassword);
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    attempts++;
+  }
+  return WiFi.status() == WL_CONNECTED;
+}
 }

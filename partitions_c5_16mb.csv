@@ -1,7 +1,7 @@
 # NM-CYD-C5 (ESP32-C5-WROOM-1) 16 MB flash partition table.
-# Mirrors the original board's huge_app layout (single ota_0 app + spiffs +
-# coredump) but scales the app to 4 MB and the SPIFFS data area to the rest of
-# the 16 MB flash. The HaleHound firmware is ~1.8 MB, so 4 MB leaves headroom.
+# A huge_app-style layout (single ota_0 app + spiffs + coredump) with the app
+# scaled to 4 MB and the SPIFFS data area to the rest of the 16 MB flash. The
+# firmware is ~1.8 MB, so 4 MB leaves headroom.
 # Name,   Type, SubType, Offset,   Size,     Flags
 nvs,      data, nvs,     0x9000,   0x5000,
 otadata,  data, ota,     0xe000,   0x2000,
