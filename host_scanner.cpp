@@ -5,30 +5,24 @@
 #include "utils.h"
 #include "wificonfig.h"
 #include <WiFi.h>
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Host Scanner - connects out to a WiFi network (reusing FirmwareUpdate's
-// existing STA connect flow), then sweeps the local /24 subnet for live
-// hosts and checks a curated list of ~20 common ports on each one found.
-//
-// Two-phase design keeps this sane on a single-core microcontroller: a
-// liveness pass first (one quick connection attempt per candidate IP, timed
-// rather than judged purely on success/failure - a fast RST from a closed
-// port still proves the host is alive), then the full port sweep only
-// against hosts that actually responded. A naive single-phase 254-host x
-// 20-port sweep would be ~21 minutes worst case; two-phase keeps a typical
-// home/office subnet under a couple of minutes.
-// ═══════════════════════════════════════════════════════════════════════════
+#include <lwip/inet_chksum.h>
+#include <lwip/prot/icmp.h>
+#include <lwip/sockets.h>
 
 extern TFT_eSPI tft;
 
 namespace HostScanner {
 
-#define SCREEN_WIDTH 240
-#define STATUS_BAR_Y_OFFSET 20
-#define STATUS_BAR_HEIGHT 16
-#define ICON_SIZE 16
-#define ICON_NUM 2
+static constexpr int SCREEN_WIDTH = 240;
+static constexpr int STATUS_BAR_Y_OFFSET = 20;
+static constexpr int STATUS_BAR_HEIGHT = 16;
+static constexpr int ICON_SIZE = 16;
+static constexpr int ICON_NUM = 2;
+static constexpr int RESULTS_PER_PAGE = 5;
+static constexpr int MAX_SCAN_TARGETS = 254;
+static constexpr int MAX_HOSTS = 64;
+static constexpr uint32_t PING_TIMEOUT_MS = 180;
+static constexpr uint32_t CONNECT_TIMEOUT_MS = 180;
 
 static bool uiDrawn = false;
 static const int yshift = 30;
@@ -40,33 +34,102 @@ static const uint16_t COMMON_PORTS[] = {
   21, 22, 23, 25, 53, 80, 110, 111, 135, 139,
   143, 443, 445, 993, 995, 1723, 3306, 3389, 5900, 8080
 };
-#define NUM_COMMON_PORTS 20
-#define CONNECT_TIMEOUT_MS 250
+static constexpr int NUM_COMMON_PORTS = sizeof(COMMON_PORTS) / sizeof(COMMON_PORTS[0]);
 
 struct HostResult {
-  uint8_t lastOctet;
+  uint32_t address;
   uint16_t openPorts[NUM_COMMON_PORTS];
   uint8_t openPortCount;
 };
-#define MAX_HOSTS 64
+
 static HostResult results[MAX_HOSTS];
 static int resultCount = 0;
+static int discoveredHostCount = 0;
+static bool resultsTruncated = false;
 static int listStartIndex = 0;
 
 static int iconX[ICON_NUM] = {188, 210};
 static const unsigned char* icons[ICON_NUM] = {
-  bitmap_icon_undo,     // rescan
-  bitmap_icon_go_back   // exit feature
+  bitmap_icon_undo,
+  bitmap_icon_go_back
 };
 
-int stopX = 60, stopY = 280, stopW = 120, stopH = 28;
+static int stopX = 60, stopY = 280, stopW = 120, stopH = 28;
+
+void runUI();
+
+uint32_t ipToUint(const IPAddress& ip) {
+  return (static_cast<uint32_t>(ip[0]) << 24) |
+         (static_cast<uint32_t>(ip[1]) << 16) |
+         (static_cast<uint32_t>(ip[2]) << 8) |
+         static_cast<uint32_t>(ip[3]);
+}
+
+IPAddress uintToIp(uint32_t value) {
+  return IPAddress(static_cast<uint8_t>(value >> 24),
+                   static_cast<uint8_t>(value >> 16),
+                   static_cast<uint8_t>(value >> 8),
+                   static_cast<uint8_t>(value));
+}
+
+int openPingSocket() {
+  int socketFd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+  if (socketFd < 0) return -1;
+  timeval timeout = {0, PING_TIMEOUT_MS * 1000};
+  if (setsockopt(socketFd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0) {
+    close(socketFd);
+    return -1;
+  }
+  return socketFd;
+}
+
+bool pingHost(int socketFd, const IPAddress& target, uint16_t sequence) {
+  icmp_echo_hdr request = {};
+  request.type = ICMP_ECHO;
+  request.code = 0;
+  request.id = htons(0x515a);
+  request.seqno = htons(sequence);
+  request.chksum = inet_chksum(&request, sizeof(request));
+
+  sockaddr_in destination = {};
+  destination.sin_family = AF_INET;
+  destination.sin_addr.s_addr = htonl(ipToUint(target));
+  if (sendto(socketFd, &request, sizeof(request), 0,
+             reinterpret_cast<sockaddr*>(&destination), sizeof(destination)) < 0) {
+    return false;
+  }
+
+  uint8_t response[96];
+  const unsigned long startedAt = millis();
+  while (millis() - startedAt <= PING_TIMEOUT_MS) {
+    sockaddr_in source = {};
+    socklen_t sourceLength = sizeof(source);
+    int length = recvfrom(socketFd, response, sizeof(response), 0,
+                          reinterpret_cast<sockaddr*>(&source), &sourceLength);
+    if (length < 0) return false;
+    if (source.sin_addr.s_addr != destination.sin_addr.s_addr) continue;
+
+    int ipHeaderLength = 0;
+    if (response[0] != ICMP_ER) {
+      ipHeaderLength = (response[0] & 0x0f) * 4;
+      if (ipHeaderLength < 20) continue;
+    }
+    if (length < ipHeaderLength + static_cast<int>(sizeof(icmp_echo_hdr))) continue;
+    const icmp_echo_hdr* reply =
+        reinterpret_cast<const icmp_echo_hdr*>(response + ipHeaderLength);
+    if (reply->type == ICMP_ER && reply->id == request.id && reply->seqno == request.seqno) {
+      return true;
+    }
+  }
+  return false;
+}
 
 bool checkAbortTouch() {
   if (!ts.touched()) return false;
   TS_Point p = ts.getPoint();
   int x = ::map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
   int y = ::map(p.y, TS_MAXY, TS_MINY, 0, 319);
-  return (x >= stopX && x <= stopX + stopW && y >= stopY && y <= stopY + stopH);
+  return x >= stopX && x <= stopX + stopW && y >= stopY && y <= stopY + stopH;
 }
 
 void drawStopButton() {
@@ -86,11 +149,11 @@ void drawIdle() {
   tft.setTextFont(1);
   tft.setTextColor(UI_GUNMETAL, TFT_BLACK);
   tft.setCursor(10, 50 + yshift);
-  tft.print("Connects to WiFi, then scans");
+  tft.print("Uses ICMP to find live hosts,");
   tft.setCursor(10, 62 + yshift);
-  tft.print("the local subnet for live hosts");
+  tft.print("then checks 20 common ports.");
   tft.setCursor(10, 74 + yshift);
-  tft.print("and ~20 common ports on each.");
+  tft.print("Scan range follows subnet mask.");
 
   tft.drawRoundRect(60, 110 + yshift, 120, 34, 4, UI_AMBER);
   tft.setTextColor(UI_AMBER, TFT_BLACK);
@@ -102,41 +165,108 @@ void drawResults() {
   tft.fillRect(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, 320, TFT_BLACK);
   tft.setTextFont(1);
   tft.setTextColor(UI_CYAN, TFT_BLACK);
-  tft.setCursor(10, 24 + yshift);
+  tft.setCursor(6, 24 + yshift);
   if (resultCount == 0) {
-    tft.print("No live hosts found.");
+    tft.print("No ICMP-responsive hosts found.");
     return;
   }
-  tft.printf("%d live host(s):", resultCount);
 
-  int yPos = 40 + yshift;
-  for (int i = 0; i < 10; i++) {
-    int idx = i + listStartIndex;
-    if (idx >= resultCount) break;
+  const int page = listStartIndex / RESULTS_PER_PAGE + 1;
+  const int pages = (resultCount + RESULTS_PER_PAGE - 1) / RESULTS_PER_PAGE;
+  if (resultsTruncated) {
+    tft.printf("Showing %d/%d  page %d/%d", resultCount, discoveredHostCount, page, pages);
+  } else {
+    tft.printf("%d host(s)  page %d/%d", resultCount, page, pages);
+  }
 
-    tft.setCursor(10, yPos);
+  for (int row = 0; row < RESULTS_PER_PAGE; row++) {
+    const int index = listStartIndex + row;
+    if (index >= resultCount) break;
+    const int yPos = 70 + row * 40;
+    const IPAddress address = uintToIp(results[index].address);
+    tft.setCursor(6, yPos);
     tft.setTextColor(UI_CYAN, TFT_BLACK);
-    tft.printf(".%-3d ", results[idx].lastOctet);
+    tft.print(address.toString());
+    tft.print(" ");
 
-    if (results[idx].openPortCount == 0) {
+    if (results[index].openPortCount == 0) {
       tft.setTextColor(UI_GUNMETAL, TFT_BLACK);
-      tft.print("(no common ports open)");
+      tft.print("alive");
     } else {
-      String line = "";
-      for (int j = 0; j < results[idx].openPortCount; j++) {
-        if (j > 0) line += ",";
-        line += String(results[idx].openPorts[j]);
-      }
-      if (line.length() > 28) line = line.substring(0, 25) + "...";
       tft.setTextColor(GREEN, TFT_BLACK);
-      tft.print(line);
+      const int previewCount = min<int>(results[index].openPortCount, 4);
+      for (int port = 0; port < previewCount; port++) {
+        if (port > 0) tft.print(",");
+        tft.print(results[index].openPorts[port]);
+      }
+      if (results[index].openPortCount > previewCount) {
+        tft.printf(" +%d", results[index].openPortCount - previewCount);
+      }
     }
-    yPos += 22;
+    tft.setCursor(6, yPos + 14);
+    tft.setTextColor(UI_GUNMETAL, TFT_BLACK);
+    tft.print("Tap for all ports");
+    tft.drawLine(0, yPos + 29, SCREEN_WIDTH, yPos + 29, UI_GUNMETAL);
+  }
+
+  tft.setTextColor(listStartIndex > 0 ? UI_AMBER : UI_GUNMETAL, TFT_BLACK);
+  tft.setCursor(18, 286);
+  tft.print("< PREV");
+  tft.setTextColor(listStartIndex + RESULTS_PER_PAGE < resultCount ? UI_AMBER : UI_GUNMETAL,
+                   TFT_BLACK);
+  tft.setCursor(164, 286);
+  tft.print("NEXT >");
+}
+
+void drawResultDetail(int index) {
+  if (index < 0 || index >= resultCount) return;
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextFont(1);
+  tft.setTextColor(UI_CYAN, TFT_BLACK);
+  tft.setCursor(5, 4);
+  tft.print("Host details");
+  tft.drawBitmap(210, 2, bitmap_icon_go_back, 16, 16, UI_CYAN);
+  tft.drawLine(0, 20, SCREEN_WIDTH, 20, UI_CYAN);
+  tft.setCursor(5, 32);
+  tft.print(uintToIp(results[index].address).toString());
+  tft.setCursor(5, 52);
+  if (results[index].openPortCount == 0) {
+    tft.print("No common open ports");
+  } else {
+    tft.print("Open ports:");
+    for (int port = 0; port < results[index].openPortCount; port++) {
+      tft.setCursor(5 + (port % 4) * 57, 72 + (port / 4) * 22);
+      tft.print(results[index].openPorts[port]);
+    }
+  }
+
+  while (true) {
+    if (ts.touched()) {
+      TS_Point point = ts.getPoint();
+      int x = ::map(point.x, TS_MINX, TS_MAXX, 0, SCREEN_WIDTH - 1);
+      int y = ::map(point.y, TS_MAXY, TS_MINY, 0, 319);
+      if (x >= 195 && y <= 32) {
+        while (ts.touched()) delay(10);
+        uiDrawn = false;
+        runUI();
+        drawResults();
+        return;
+      }
+    }
+    delay(10);
   }
 }
 
-// Blocking: connects to WiFi, sweeps the subnet, and shows progress. Polls
-// the on-screen STOP button between probes so a scan can be aborted early.
+void scrollResults(int direction) {
+  if (direction < 0 && listStartIndex > 0) {
+    listStartIndex = max(0, listStartIndex - RESULTS_PER_PAGE);
+    drawResults();
+  } else if (direction > 0 && listStartIndex + RESULTS_PER_PAGE < resultCount) {
+    listStartIndex += RESULTS_PER_PAGE;
+    drawResults();
+  }
+}
+
 void runScan() {
   tft.fillRect(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, 320, TFT_BLACK);
   tft.setTextFont(1);
@@ -155,67 +285,112 @@ void runScan() {
     return;
   }
 
-  IPAddress localIP = WiFi.localIP();
+  const IPAddress localIP = WiFi.localIP();
+  const IPAddress subnetMask = WiFi.subnetMask();
+  const uint32_t localAddress = ipToUint(localIP);
+  const uint32_t mask = ipToUint(subnetMask);
+  const uint32_t networkAddress = localAddress & mask;
+  const uint32_t broadcastAddress = networkAddress | ~mask;
+
+  if (mask == 0 || broadcastAddress <= networkAddress + 1) {
+    tft.setTextColor(RED, TFT_BLACK);
+    tft.setCursor(10, 60 + yshift);
+    tft.print("Invalid subnet mask.");
+    delay(1500);
+    state = STATE_IDLE;
+    drawIdle();
+    return;
+  }
+
+  uint32_t firstTarget = networkAddress + 1;
+  uint32_t lastTarget = broadcastAddress - 1;
+  const uint32_t availableTargets = lastTarget - firstTarget + 1;
+  bool rangeCapped = availableTargets > MAX_SCAN_TARGETS;
+  if (rangeCapped) {
+    const uint32_t halfWindow = MAX_SCAN_TARGETS / 2;
+    firstTarget = localAddress > networkAddress + halfWindow
+                    ? localAddress - halfWindow
+                    : networkAddress + 1;
+    if (firstTarget + MAX_SCAN_TARGETS - 1 > lastTarget) {
+      firstTarget = lastTarget - MAX_SCAN_TARGETS + 1;
+    }
+    lastTarget = firstTarget + MAX_SCAN_TARGETS - 1;
+  }
 
   tft.fillRect(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, 320, TFT_BLACK);
   tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setCursor(10, 30 + yshift);
-  tft.print("Connected: " + localIP.toString());
+  tft.print("IP: " + localIP.toString());
+  tft.setCursor(10, 42 + yshift);
+  tft.print("Mask: " + subnetMask.toString());
+  if (rangeCapped) {
+    tft.setCursor(10, 54 + yshift);
+    tft.setTextColor(UI_AMBER, TFT_BLACK);
+    tft.print("Large subnet: nearest 254 hosts");
+  }
   drawStopButton();
 
-  uint8_t liveHosts[254];
+  uint32_t liveHosts[MAX_SCAN_TARGETS];
   int liveCount = 0;
   bool aborted = false;
-
-  for (int host = 1; host <= 254 && !aborted; host++) {
-    if (host == localIP[3]) continue;  // skip ourselves
-
-    tft.fillRect(10, 55 + yshift, 220, 12, TFT_BLACK);
-    tft.setCursor(10, 55 + yshift);
-    tft.setTextColor(UI_CYAN, TFT_BLACK);
-    tft.printf("Phase 1/2: .%d (%d found)", host, liveCount);
-
-    IPAddress target(localIP[0], localIP[1], localIP[2], (uint8_t)host);
-    WiFiClient client;
-    unsigned long t0 = millis();
-    bool ok = client.connect(target, 80, CONNECT_TIMEOUT_MS);
-    unsigned long elapsed = millis() - t0;
-    client.stop();
-
-    // A fast response - open (ok==true) or a quick refusal/RST - proves the
-    // host is alive even if port 80 itself is closed; only a full timeout
-    // with no reply at all means nothing answered.
-    bool alive = ok || (elapsed < (unsigned long)(CONNECT_TIMEOUT_MS - 30));
-    if (alive && liveCount < 254) liveHosts[liveCount++] = (uint8_t)host;
-
-    aborted = checkAbortTouch();
+  const int targetCount = static_cast<int>(lastTarget - firstTarget + 1);
+  int targetIndex = 0;
+  int pingSocket = openPingSocket();
+  if (pingSocket < 0) {
+    tft.setTextColor(RED, TFT_BLACK);
+    tft.setCursor(10, 100);
+    tft.print("Unable to open ICMP socket.");
+    delay(1500);
+    state = STATE_IDLE;
+    drawIdle();
+    return;
   }
 
+  for (uint32_t address = firstTarget; address <= lastTarget && !aborted; address++) {
+    targetIndex++;
+    if (address == localAddress) continue;
+    const IPAddress target = uintToIp(address);
+
+    tft.fillRect(10, 100, 220, 14, TFT_BLACK);
+    tft.setCursor(10, 100);
+    tft.setTextColor(UI_CYAN, TFT_BLACK);
+    tft.printf("Ping %d/%d (%d found)", targetIndex, targetCount, liveCount);
+
+    if (pingHost(pingSocket, target, static_cast<uint16_t>(targetIndex)) &&
+        liveCount < MAX_SCAN_TARGETS) {
+      liveHosts[liveCount++] = address;
+    }
+    aborted = checkAbortTouch();
+    yield();
+  }
+  close(pingSocket);
+
   resultCount = 0;
+  discoveredHostCount = liveCount;
+  resultsTruncated = liveCount > MAX_HOSTS;
   for (int i = 0; i < liveCount && !aborted && resultCount < MAX_HOSTS; i++) {
-    uint8_t host = liveHosts[i];
-    HostResult& r = results[resultCount];
-    r.lastOctet = host;
-    r.openPortCount = 0;
+    HostResult& result = results[resultCount];
+    result.address = liveHosts[i];
+    result.openPortCount = 0;
+    const IPAddress target = uintToIp(result.address);
 
-    for (int p = 0; p < NUM_COMMON_PORTS && !aborted; p++) {
-      tft.fillRect(10, 55 + yshift, 220, 12, TFT_BLACK);
-      tft.setCursor(10, 55 + yshift);
+    for (int portIndex = 0; portIndex < NUM_COMMON_PORTS && !aborted; portIndex++) {
+      tft.fillRect(10, 100, 220, 14, TFT_BLACK);
+      tft.setCursor(10, 100);
       tft.setTextColor(UI_CYAN, TFT_BLACK);
-      tft.printf("Phase 2/2: .%d port %d", host, COMMON_PORTS[p]);
+      tft.printf("Ports %d/%d: %s:%d", i + 1, liveCount,
+                 target.toString().c_str(), COMMON_PORTS[portIndex]);
 
-      IPAddress target(localIP[0], localIP[1], localIP[2], host);
       WiFiClient client;
-      if (client.connect(target, COMMON_PORTS[p], CONNECT_TIMEOUT_MS)) {
-        if (r.openPortCount < NUM_COMMON_PORTS) {
-          r.openPorts[r.openPortCount++] = COMMON_PORTS[p];
-        }
+      if (client.connect(target, COMMON_PORTS[portIndex], CONNECT_TIMEOUT_MS) &&
+          result.openPortCount < NUM_COMMON_PORTS) {
+        result.openPorts[result.openPortCount++] = COMMON_PORTS[portIndex];
       }
       client.stop();
-
       aborted = checkAbortTouch();
+      yield();
     }
-    resultCount++;
+    if (!aborted) resultCount++;
   }
 
   listStartIndex = 0;
@@ -225,21 +400,20 @@ void runScan() {
 
 void runUI() {
   static int iconY = STATUS_BAR_Y_OFFSET;
-
   if (!uiDrawn) {
     tft.drawLine(0, 19, 240, 19, UI_CYAN);
     tft.fillRect(140, STATUS_BAR_Y_OFFSET, SCREEN_WIDTH - 140, STATUS_BAR_HEIGHT, DARK_GRAY);
     for (int i = 0; i < ICON_NUM; i++) {
-      if (icons[i] != NULL) tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
+      if (icons[i] != nullptr) tft.drawBitmap(iconX[i], iconY, icons[i], ICON_SIZE, ICON_SIZE, UI_CYAN);
     }
-    tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, UI_AMBER);
+    tft.drawLine(0, STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, SCREEN_WIDTH,
+                 STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT, UI_AMBER);
     uiDrawn = true;
   }
 
   static unsigned long lastTouchCheck = 0;
-  if (millis() - lastTouchCheck < 50) return;
+  if (millis() - lastTouchCheck < 80) return;
   lastTouchCheck = millis();
-
   if (!ts.touched() || !feature_active) return;
 
   TS_Point p = ts.getPoint();
@@ -250,23 +424,27 @@ void runUI() {
     if (x >= iconX[0] - 5 && x <= iconX[0] + ICON_SIZE + 5) {
       state = STATE_IDLE;
       drawIdle();
-      return;
-    }
-    if (x >= iconX[1] - 5 && x <= iconX[1] + ICON_SIZE + 5) {
+    } else if (x >= iconX[1] - 5 && x <= iconX[1] + ICON_SIZE + 5) {
       feature_exit_requested = true;
-      return;
     }
     return;
   }
 
-  if (state == STATE_IDLE) {
-    if (x >= 60 && x <= 180 && y >= 110 + yshift && y <= 144 + yshift) {
-      delay(150);  // debounce so the same tap doesn't get read again mid-scan
-      runScan();
-    }
-  } else if (state == STATE_RESULTS) {
-    // No per-row detail view in this pass; up/down scrolling not needed for
-    // typical small subnets (list shows the first 10 live hosts).
+  if (state == STATE_IDLE && x >= 60 && x <= 180 &&
+      y >= 110 + yshift && y <= 144 + yshift) {
+    unsigned long releaseStart = millis();
+    while (ts.touched() && millis() - releaseStart < 1500) delay(10);
+    runScan();
+  } else if (state == STATE_RESULTS && y >= 65 && y < 265) {
+    int row = max(0, (y - 70) / 40);
+    int index = listStartIndex + row;
+    unsigned long releaseStart = millis();
+    while (ts.touched() && millis() - releaseStart < 1500) delay(10);
+    drawResultDetail(index);
+  } else if (state == STATE_RESULTS && y >= 275) {
+    scrollResults(x < SCREEN_WIDTH / 2 ? -1 : 1);
+    unsigned long releaseStart = millis();
+    while (ts.touched() && millis() - releaseStart < 1500) delay(10);
   }
 }
 
@@ -275,15 +453,13 @@ void hostScannerSetup() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(UI_CYAN, TFT_BLACK);
   tft.setTextSize(1);
-
   uiDrawn = false;
   state = STATE_IDLE;
   resultCount = 0;
+  discoveredHostCount = 0;
+  resultsTruncated = false;
   listStartIndex = 0;
-
-  float currentBatteryVoltage = readBatteryVoltage();
-  drawStatusBar(currentBatteryVoltage, false);
-
+  drawStatusBar(readBatteryVoltage(), false);
   runUI();
   drawIdle();
 }

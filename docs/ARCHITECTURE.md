@@ -63,6 +63,8 @@ module fitted in the one physical slot; it does not enable concurrent operation.
 ## Radio stacks
 
 - Wi-Fi uses Arduino-ESP32 networking plus selected low-level ESP-IDF Wi-Fi APIs.
+- ESP-NOW tests use the ESP-IDF peer API in station mode and release the stack
+  when their feature screen exits.
 - BLE uses NimBLE-Arduino. ESP32-C5 has no Bluetooth Classic controller.
 - IEEE 802.15.4 uses the low-level `esp_ieee802154` promiscuous receive API.
 - NRF24 tools use RF24 over the external shared SPI bus.

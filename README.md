@@ -40,7 +40,13 @@ constraints.
 - Deauthentication detector
 - Access-point scanner
 - Captive portal
-- Local `/24` host and common-port scanner
+- Subnet-aware host scanner using ICMP discovery and common-port checks
+  (large subnets are capped to the nearest 254 addresses)
+
+### ESP-NOW
+
+- Broadcast test sending a `QUETZAL-TEST` frame once per second
+- Receive test showing sender MAC, RSSI, frame length, and payload
 
 ### Bluetooth Low Energy
 
@@ -95,8 +101,6 @@ Requires a CC1101 in the NM-RF-HAT slot:
 - Persistent RGB light with static, flashlight, rainbow, and breathing modes
 - Boot-time RF-HAT detection with unavailable menu entries disabled
 - Status bar with Wi-Fi, BLE, temperature, and device information
-
-IR recording remains planned and is currently shown as unavailable in the UI.
 
 ## Build
 
@@ -198,7 +202,10 @@ Source files use UTF-8 and LF line endings, enforced by `.editorconfig` and
   long-duration hardware validation.
 - Some operations are intentionally synchronous and temporarily block other UI
   work while scanning or connecting.
-- IR capture and saved IR profiles are not implemented.
+- Host discovery depends on ICMP replies; devices that block echo requests may
+  not appear in Host Scanner results.
+- Host Scanner probes at most 254 addresses and retains detailed port results
+  for the first 64 responsive hosts, reporting when the list is truncated.
 
 ## History and attribution
 

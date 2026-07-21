@@ -14,6 +14,7 @@
 #include "file_manager.h"
 #include "rgb_light.h"
 #include "host_scanner.h"
+#include "espnow_test.h"
 #include "touch_calibration.h"
 #include "subconfig.h"
 #include "utils.h"
@@ -38,7 +39,7 @@ const char *menu_items[NUM_MENU_ITEMS] = {
     "Bluetooth",
     "2.4GHz",
     "SubGHz",
-    "IR Remote",
+    "ESP-NOW",
     "Tools",
     "Setting",
     "About"};
@@ -48,7 +49,7 @@ const unsigned char *bitmap_icons[NUM_MENU_ITEMS] = {
     bitmap_icon_ble,
     bitmap_icon_signals,
     bitmap_icon_antenna,
-    bitmap_icon_flash,
+    bitmap_icon_signal,
     bitmap_icon_bash,
     bitmap_icon_setting,
     bitmap_icon_question};
@@ -118,10 +119,10 @@ const char *settings_submenu_items[settings_NUM_SUBMENU_ITEMS] = {
     "Back to Main Menu"};
 
 
-const int ir_NUM_SUBMENU_ITEMS = 3;
-const char *ir_submenu_items[ir_NUM_SUBMENU_ITEMS] = {
-    "Record [Coming soon]",
-    "Saved Profile [Coming soon]",
+const int espnow_NUM_SUBMENU_ITEMS = 3;
+const char *espnow_submenu_items[espnow_NUM_SUBMENU_ITEMS] = {
+    "Broadcast Test",
+    "Receive Test",
     "Back to Main Menu"};
 
 
@@ -221,9 +222,9 @@ const unsigned char *settings_submenu_icons[settings_NUM_SUBMENU_ITEMS] = {
     bitmap_icon_go_back
 };
 
-const unsigned char *ir_submenu_icons[ir_NUM_SUBMENU_ITEMS] = {
-    bitmap_icon_question,
-    bitmap_icon_question,
+const unsigned char *espnow_submenu_icons[espnow_NUM_SUBMENU_ITEMS] = {
+    bitmap_icon_signal,
+    bitmap_icon_eye2,
     bitmap_icon_go_back
 };
 
@@ -260,10 +261,10 @@ void updateActiveSubmenu() {
             active_submenu_icons = subghz_submenu_icons;
             active_submenu_hwreq = subghz_submenu_hwreq;
             break;
-        case 4: // IR
-            active_submenu_items = ir_submenu_items;
-            active_submenu_size = ir_NUM_SUBMENU_ITEMS;
-            active_submenu_icons = ir_submenu_icons;
+        case 4: // ESP-NOW
+            active_submenu_items = espnow_submenu_items;
+            active_submenu_size = espnow_NUM_SUBMENU_ITEMS;
+            active_submenu_icons = espnow_submenu_icons;
             active_submenu_hwreq = nullptr;
             break;
         case 5: // Tools
@@ -406,7 +407,7 @@ const uint16_t icon_colors[NUM_MENU_ITEMS] = {
   0xFFFF, // Bluetooth
   0xFFFF, // 2.4GHz
   0xFFFF, // SubGHz
-  0xFFFF, // IR Remote
+  0xFFFF, // ESP-NOW
   0xFFFF, // Tools
   0x8410, // Setting
   0xFFFF  // About
@@ -3075,12 +3076,45 @@ void handleToolsSubmenuButtons() {
 }
 
 
-void handleIRSubmenuButtons() {
+void restoreEspNowSubmenu() {
+    in_sub_menu = true;
+    is_main_menu = false;
+    submenu_initialized = false;
+    feature_active = false;
+    feature_exit_requested = false;
+    displaySubmenu();
+    delay(200);
+}
+
+void runEspNowTest(bool broadcastMode) {
+    feature_active = true;
+    feature_exit_requested = false;
+    EspNowTest::espNowTestSetup(broadcastMode);
+    while (!feature_exit_requested) {
+        EspNowTest::espNowTestLoop();
+        delay(5);
+    }
+    EspNowTest::espNowTestCleanup();
+    restoreEspNowSubmenu();
+}
+
+void activateEspNowSubmenuItem(int index) {
+    current_submenu_index = index;
+    last_interaction_time = millis();
+    if (index == espnow_NUM_SUBMENU_ITEMS - 1) {
+        in_sub_menu = false;
+        feature_active = false;
+        feature_exit_requested = false;
+        displayMenu();
+        is_main_menu = false;
+        return;
+    }
+    runEspNowTest(index == 0);
+}
+
+void handleEspNowSubmenuButtons() {
     if (isButtonPressed(BTN_UP)) {
         current_submenu_index = (current_submenu_index - 1 + active_submenu_size) % active_submenu_size;
-        if (current_submenu_index < 0) {
-            current_submenu_index = NUM_SUBMENU_ITEMS - 1;
-        }
         last_interaction_time = millis();
         displaySubmenu();
         delay(200);
@@ -3088,203 +3122,41 @@ void handleIRSubmenuButtons() {
 
     if (isButtonPressed(BTN_DOWN)) {
         current_submenu_index = (current_submenu_index + 1) % active_submenu_size;
-        if (current_submenu_index >= NUM_SUBMENU_ITEMS) {
-            current_submenu_index = 0;
-        }
         last_interaction_time = millis();
         displaySubmenu();
         delay(200);
     }
 
     if (isButtonPressed(BTN_SELECT)) {
-        last_interaction_time = millis();
+        const int selected = current_submenu_index;
         delay(200);
-
-        if (current_submenu_index == 2) {
-            in_sub_menu = false;
-            feature_active = false;
-            feature_exit_requested = false;
-            displayMenu();
-            handleButtons();
-            is_main_menu = false;
+        while (isButtonPressed(BTN_SELECT)) {
+            delay(10);
+            yield();
         }
-
-        if (current_submenu_index == 0) {
-            current_submenu_index = 0;
-            in_sub_menu = true;
-            feature_active = true;
-            feature_exit_requested = false;
-            //replayat::ReplayAttackSetup();
-            while (current_submenu_index == 0 && !feature_exit_requested) {
-                current_submenu_index = 0;
-                in_sub_menu = true;
-                //replayat::ReplayAttackLoop();
-                if (isButtonPressed(BTN_SELECT)) {
-                    in_sub_menu = true;
-                    is_main_menu = false;
-                    submenu_initialized = false;
-                    feature_active = false;
-                    feature_exit_requested = false;
-                    displaySubmenu();
-                    delay(200);
-                    while (isButtonPressed(BTN_SELECT)) {
-                        delay(10); yield();
-                    }
-                    break;
-                }
-            }
-            if (feature_exit_requested) {
-                in_sub_menu = true;
-                is_main_menu = false;
-                submenu_initialized = false;
-                feature_active = false;
-                feature_exit_requested = false;
-                displaySubmenu();
-                delay(200);
-            }
-        }
-
-        if (current_submenu_index == 1) {
-            current_submenu_index = 1;
-            in_sub_menu = true;
-            feature_active = true;
-            feature_exit_requested = false;
-            //subjammer::subjammerSetup();
-            while (current_submenu_index == 1 && !feature_exit_requested) {
-                current_submenu_index = 1;
-                in_sub_menu = true;
-                //subjammer::subjammerLoop();
-                if (isButtonPressed(BTN_SELECT)) {
-                    in_sub_menu = true;
-                    is_main_menu = false;
-                    submenu_initialized = false;
-                    feature_active = false;
-                    feature_exit_requested = false;
-                    displaySubmenu();
-                    delay(200);
-                    while (isButtonPressed(BTN_SELECT)) {
-                        delay(10); yield();
-                    }
-                    break;
-                }
-            }
-            if (feature_exit_requested) {
-                in_sub_menu = true;
-                is_main_menu = false;
-                submenu_initialized = false;
-                feature_active = false;
-                feature_exit_requested = false;
-                displaySubmenu();
-                delay(200);
-            }
-        }
+        activateEspNowSubmenuItem(selected);
+        return;
     }
 
-    if (ts.touched() && !feature_active) {
-        TS_Point p = ts.getPoint();
-        delay(10);
+    if (!ts.touched() || feature_active) return;
+    TS_Point point = ts.getPoint();
+    int x = ::map(point.x, TS_MINX, TS_MAXX, 0, 239);
+    int y = ::map(point.y, TS_MAXY, TS_MINY, 0, 319);
 
-        int x, y;
-        x = ::map(p.x, TS_MINX, TS_MAXX, 0, 239);
-        y = ::map(p.y, TS_MAXY, TS_MINY, 0, 319);
+    for (int i = 0; i < active_submenu_size; i++) {
+        int yPos = 30 + i * 30;
+        if (i == active_submenu_size - 1) yPos += 10;
+        const int height = i == active_submenu_size - 1 ? 40 : 30;
+        if (x < 10 || x > 220 || y < yPos || y > yPos + height) continue;
 
-        for (int i = 0; i < active_submenu_size; i++) {
-            int yPos = 30 + i * 30;
-            if (i == active_submenu_size - 1) yPos += 10;
-
-            int button_x1 = 10;
-            int button_y1 = yPos;
-            int button_x2 = 110;
-            int button_y2 = yPos + (i == active_submenu_size - 1 ? 40 : 30);
-
-            if (x >= button_x1 && x <= button_x2 && y >= button_y1 && y <= button_y2) {
-                current_submenu_index = i;
-                last_interaction_time = millis();
-                displaySubmenu();
-                delay(200);
-
-                if (current_submenu_index == 2) {
-                    in_sub_menu = false;
-                    feature_active = false;
-                    feature_exit_requested = false;
-                    displayMenu();
-                    handleButtons();
-                    is_main_menu = false;
-
-
-                } else if (current_submenu_index == 0) {
-                    current_submenu_index = 0;
-                    in_sub_menu = true;
-                    feature_active = true;
-                    feature_exit_requested = false;
-                    //replayat::ReplayAttackSetup();
-                    while (current_submenu_index == 0 && !feature_exit_requested) {
-                        current_submenu_index = 0;
-                        in_sub_menu = true;
-                        //replayat::ReplayAttackLoop();
-                        if (isButtonPressed(BTN_SELECT)) {
-                            in_sub_menu = true;
-                            is_main_menu = false;
-                            submenu_initialized = false;
-                            feature_active = false;
-                            feature_exit_requested = false;
-                            displaySubmenu();
-                            delay(200);
-                            while (isButtonPressed(BTN_SELECT)) {
-                                delay(10); yield();
-                    }
-                            break;
-                        }
-                    }
-                    if (feature_exit_requested) {
-                        in_sub_menu = true;
-                        is_main_menu = false;
-                        submenu_initialized = false;
-                        feature_active = false;
-                        feature_exit_requested = false;
-                        displaySubmenu();
-                        delay(200);
-                    }
-                } else if (current_submenu_index == 1) {
-                    current_submenu_index = 1;
-                    in_sub_menu = true;
-                    feature_active = true;
-                    feature_exit_requested = false;
-                    //SavedProfile::saveSetup();
-                    while (current_submenu_index == 1 && !feature_exit_requested) {
-                        current_submenu_index = 1;
-                        in_sub_menu = true;
-                        //SavedProfile::saveLoop();
-                        if (isButtonPressed(BTN_SELECT)) {
-                            in_sub_menu = true;
-                            is_main_menu = false;
-                            submenu_initialized = false;
-                            feature_active = false;
-                            feature_exit_requested = false;
-                            displaySubmenu();
-                            delay(200);
-                            while (isButtonPressed(BTN_SELECT)) {
-                                delay(10); yield();
-                    }
-                            break;
-                        }
-                    }
-                    if (feature_exit_requested) {
-                        in_sub_menu = true;
-                        is_main_menu = false;
-                        submenu_initialized = false;
-                        feature_active = false;
-                        feature_exit_requested = false;
-                        displaySubmenu();
-                        delay(200);
-                    }
-                }
-                break;
-            }
-        }
+        current_submenu_index = i;
+        displaySubmenu();
+        unsigned long releaseStart = millis();
+        while (ts.touched() && millis() - releaseStart < 1500) delay(10);
+        activateEspNowSubmenuItem(i);
+        return;
     }
 }
-
 
 void handleAboutPage() {
 
@@ -3400,7 +3272,7 @@ void handleButtons() {
             case 1: handleBluetoothSubmenuButtons(); break;
             case 2: handleNRFSubmenuButtons(); break;
             case 3: handleSubGHzSubmenuButtons(); break;
-            case 4: handleIRSubmenuButtons(); break;
+            case 4: handleEspNowSubmenuButtons(); break;
             case 5: handleToolsSubmenuButtons(); break;
             case 6: handleSettingsSubmenuButtons(); break;
             case 7: handleAboutPage(); break;

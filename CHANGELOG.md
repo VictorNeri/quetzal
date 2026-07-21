@@ -13,6 +13,7 @@ All notable changes to Quetzal are documented here.
 - BLE HID keyboard and media remote
 - Native ESP32-C5 IEEE 802.15.4 channel scanner and passive sniffer
 - Wi-Fi local host and common-port scanner
+- ESP-NOW broadcast and receive diagnostics
 - LittleFS and SD file manager
 - Persistent RGB light modes
 - Persistent touchscreen calibration
@@ -31,6 +32,7 @@ All notable changes to Quetzal are documented here.
 - Renamed the main sketch to `quetzal.ino`
 - Normalized source line endings and explicitly scoped repeated macros
 - Switched PlatformIO to the supported `build_src_filter` setting
+- Replaced the unavailable IR Remote menu with ESP-NOW tests
 
 ### Fixed
 
@@ -41,6 +43,8 @@ All notable changes to Quetzal are documented here.
 - Sub-GHz RMT output is routed to CC1101 GDO0, the module's TX data input
 - RGB setting changes are coalesced into one NVS write per touch gesture
 - Touch calibration times out and rejects implausibly small sample spans
+- Host Scanner now uses ICMP discovery, the active subnet mask, bounded scan
+  ranges, and paged results instead of a TCP-port-80 timing heuristic
 
 ### Removed
 
@@ -51,6 +55,5 @@ All notable changes to Quetzal are documented here.
 
 ### Known limitations
 
-- IR capture is not implemented.
 - Runtime RF behavior still requires physical-board validation.
 - CC1101 and NRF24L01+ cannot be active simultaneously on the current hardware.

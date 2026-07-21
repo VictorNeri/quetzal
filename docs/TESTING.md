@@ -55,8 +55,20 @@ In an authorized lab:
 - Run packet monitor and channel hopping.
 - Start and stop the captive portal.
 - Connect as a station and run the local host scanner.
+- Verify the displayed subnet mask, ICMP-discovered hosts, common open ports,
+  result paging, and the 254-address cap on a subnet larger than `/24`.
+- Tap a result to verify every common open port is available in its detail view,
+  and verify truncation is reported when more than 64 hosts respond.
 - Verify cancellation during long scans.
 - Exercise active test functions only against owned lab equipment.
+
+## ESP-NOW
+
+Use a second ESP32 configured for Wi-Fi channel 1:
+
+- Run Broadcast Test and confirm one `QUETZAL-TEST` frame arrives per second.
+- Run Receive Test and confirm sender MAC, RSSI, byte count, and payload update.
+- Exit and re-enter both modes repeatedly to verify ESP-NOW cleanup/re-init.
 
 ## BLE and IEEE 802.15.4
 
