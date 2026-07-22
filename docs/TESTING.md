@@ -94,6 +94,50 @@ Use a second ESP32 configured for Wi-Fi channel 1:
 - Scan BLE advertisements repeatedly.
 - Enumerate GATT on a test peripheral.
 - Pair the BLE remote and test keyboard/media reports.
+- Open BLE > Assessment Suite and select an owned test peripheral, then exercise
+  the tools in their displayed order:
+  - Before selection, verify every tool refuses to start. Rescan after selection
+    and verify it is preserved only when the exact address is rediscovered.
+  1. Verify Security Auditor reports address type, connection security, service/
+     characteristic bounds, pre-security reads, and declared write/notify flags.
+  2. Verify GATT Permissions sends no writes and distinguishes accepted
+     pre-security reads from characteristics that require encryption, without
+     triggering NimBLE's automatic pairing retry.
+  3. Run Privacy Analyzer against stable-public, static-random, and rotating-RPA
+     test devices; confirm same-address and matching-fingerprint observations.
+  4. Confirm Pairing Resilience requires two taps, starts one asynchronous
+     pairing/security request, reports encryption/authentication/bond/key size,
+     stops from the bottom control, expires at its fixed deadline, and never
+     guesses passkeys, changes process-wide security policy, or deletes bonds.
+  5. Enroll a Rogue Peripheral baseline, compare an unchanged device, test an
+     intentionally changed advertising fingerprint, and treat a missing baseline
+     device as inconclusive.
+  6. Confirm Notification Monitor requires two taps, subscribes to at most eight
+     sources for ten seconds, retains only event count/payload length/bounded hash,
+     separates pre-secured and secured event counts, identifies the latest CCCD
+     security transition, and stops immediately from the bottom control.
+  7. Confirm ATT Robustness requires two taps, issues at most 24 read-only probes,
+     checks the 15-second deadline between procedures, supports bottom-screen STOP,
+     and performs a recovery reconnect.
+  8. Confirm Connection Resilience requires two taps, performs at most ten
+     connect/disconnect attempts no faster than one every 700 ms, and stops on touch.
+  9. Test Mesh Auditor with provisioning/proxy UUIDs and AD types 0x29-0x2b.
+  10. Confirm Replay Tester lets the user cycle readable+writable candidates and
+      inspect the UUID only after target-bound authorization, captures at most 64
+      bytes, requires a separate write confirmation,
+      writes once only to the same selected target/characteristic, and aborts if
+      the connection or retained characteristic is no longer valid. Present a
+      readable/writable value over 64 bytes and verify replay rejects it instead
+      of sending a truncated prefix.
+- Exit active tools during scanning, subscription, connection, and post-test states;
+  verify scan/client/subscription cleanup and that BLE HID still works afterward.
+- Connect a BLE HID peer and verify Assessment Suite refuses to start until that
+  peer disconnects.
+- Account for NimBLE's synchronous procedure behavior: STOP is handled between
+  procedures, while an in-flight operation may wait for the stack timeout.
+- Exercise a peripheral with an unusually large GATT database while monitoring
+  free heap to characterize NimBLE's transient discovery cache; Quetzal's own
+  retained characteristic records must remain capped at 40.
 - Disconnect and verify resources are released.
 - Run 802.15.4 channel scan and passive sniff on a test Zigbee network.
 - Alternate BLE and IEEE 802.15.4 tools repeatedly to check coexistence.

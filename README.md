@@ -66,9 +66,37 @@ constraints.
 - Sour Apple advertisement testing
 - BLE HID keyboard and media remote
 - NRF24-based 2.4 GHz BLE interference testing when an NRF24L01+ is present
+- Ordered BLE Assessment Suite for owned or explicitly authorized peripherals:
+  1. Security configuration auditor for address privacy, connection security,
+     pre-security reads, and declared GATT capabilities
+  2. Read-only GATT permission validation; write probes are never automatic
+  3. Advertisement privacy/tracking comparison across bounded rescans
+  4. Two-confirmation, asynchronously bounded pairing/bonding security check with
+     STOP support and no PIN guessing, process-wide policy changes, or bond deletion
+  5. Enrolled rogue-peripheral fingerprint comparison stored in LittleFS
+  6. Two-confirmation, stoppable ten-second notification metadata monitor that
+     retains only length/hash, separates pre-secured and secured events, and
+     identifies CCCD subscription security transitions
+  7. Two-confirmation ATT read-resilience test capped at 24 requests and 15 seconds
+  8. Two-confirmation connection resilience test capped at 10 attempts with a
+     700 ms minimum interval
+  9. Passive BLE Mesh provisioning/proxy/message/beacon exposure auditor
+  10. Target-bound authorization before capture, user-cycled characteristic
+      selection, then one 64-byte maximum replay to the same selected target and
+      displayed characteristic UUID after a separate confirmation;
+      values over 64 bytes are rejected rather than truncated
+
+Every tool starts only after an explicit target tap. A rescan preserves that
+selection only if the same address is rediscovered; otherwise selection and any
+authorization are invalidated. NimBLE may transiently cache the complete remote
+GATT database during attribute discovery before Quetzal applies its 40-record
+application retention cap; large-database peak heap behavior remains a required
+physical-board test.
 
 ESP32-C5 does not support Bluetooth Classic. Classic-only upstream features are
-not available.
+not available. High-level NimBLE operations may block until the stack's own
+procedure timeout; active tests check STOP and elapsed-time bounds between BLE
+procedures, but cannot cancel a synchronous procedure already inside NimBLE.
 
 ### IEEE 802.15.4 / Zigbee reconnaissance
 

@@ -70,6 +70,57 @@ module fitted in the one physical slot; it does not enable concurrent operation.
 - NRF24 tools use RF24 over the external shared SPI bus.
 - CC1101 tools use SmartRC-CC1101 plus the C5 RMT compatibility path.
 
+### BLE assessment ownership
+
+`ble_assessment.cpp` owns scanning, one central-role client, subscriptions, and
+all active-test state while its nested suite is open. It stops advertising on
+entry, configures passive NimBLE scanning for at most 24 results, retains at most 24
+bounded advertisement records and 40 application-level characteristic records,
+subscribes to at most eight notification sources, and deletes
+its client on every exit path. It deliberately keeps NimBLE initialized so the
+process-wide HID/server objects used by existing features remain valid.
+Suite entry is refused while a BLE HID peer remains connected; pairing checks do
+not alter NimBLE's process-wide security policy.
+
+NimBLE's `discoverAttributes()` still builds its own transient remote-attribute
+cache before the suite applies its 40-record retention cap. That cache is released
+when the suite client is deleted. The application does not retain unbounded
+advertisement, characteristic, notification, or value data, but hardware testing
+must include a deliberately large remote GATT database to characterize the
+third-party stack's peak heap use.
+
+`ble_assessment_logic.cpp` provides UI-independent bounded advertisement
+fingerprinting, AD-structure parsing, mesh exposure recognition, and payload
+copy helpers. Notification callbacks retain only a bounded hash and length under
+a critical section; they never touch the display or filesystem.
+
+Pre-security permission checks and ATT probes use the low-level one-request
+`ble_gattc_read` procedure. Replay capture uses low-level `ble_gattc_read_long`
+to determine the complete value length and reject values over 64 bytes. Neither
+path invokes `NimBLERemoteValueAttribute::readValue()`'s automatic security retry,
+so read-only auditors cannot silently initiate pairing.
+
+Every tool requires an explicit target tap. Inventory refreshes remap a selection
+only when the same BLE address is rediscovered and otherwise invalidate it.
+Active pairing, notification subscription, ATT-read, connection-resilience, and
+replay workflows bind authorization to that address and require separate
+authorization and confirmation taps. Pairing security is started asynchronously
+and completed or cancelled by the foreground state machine under a fixed deadline.
+Notification monitoring polls STOP and updates its security snapshot directly from
+the NimBLE authentication callback. Each event is attributed to its source
+characteristic and counted in the pre-secured or secured bucket at callback time;
+the UI also records the transition count and latest characteristic whose CCCD
+subscription caused an observed encryption transition.
+Replay performs no
+connection, discovery, or value capture until target-bound authorization is
+recorded, then binds the captured value and
+displayed characteristic UUID to the exact peer and rejects values over 64 bytes
+instead of replaying a truncated prefix. Client disconnect completion is observed
+through NimBLE callbacks and the post-callback invalid connection handle before reuse.
+Request, duration, payload, and attempt caps are constants. STOP is checked
+between synchronous NimBLE procedures; an in-flight procedure remains subject
+to NimBLE's own timeout and cannot be preempted by the UI.
+
 ### Wi-Fi assessment ownership
 
 The Assessment Suite is split into three focused modules:

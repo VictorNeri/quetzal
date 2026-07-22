@@ -77,6 +77,70 @@ class FirmwareContractTests(unittest.TestCase):
         self.assertIn("observationCaptureError", suite)
         self.assertIn("if ((out.subtype & 0x8) != 0)", parser)
 
+    def test_ble_assessment_suite_contract(self):
+        sketch = (ROOT / "quetzal.ino").read_text(encoding="utf-8")
+        suite_path = ROOT / "ble_assessment.cpp"
+        logic_path = ROOT / "ble_assessment_logic.cpp"
+        self.assertTrue(suite_path.is_file())
+        self.assertTrue((ROOT / "ble_assessment.h").is_file())
+        self.assertTrue(logic_path.is_file())
+        suite = suite_path.read_text(encoding="utf-8")
+        self.assertIn('#include "ble_assessment.h"', sketch)
+        self.assertIn('"Assessment Suite"', sketch)
+        for name in (
+            "Security Auditor", "GATT Permissions", "Privacy Analyzer",
+            "Pairing Resilience", "Rogue Peripheral", "Notification Monitor",
+            "ATT Robustness", "Connection Resilience", "Mesh Auditor",
+            "Replay Tester",
+        ):
+            self.assertIn(name, suite)
+        self.assertIn("BleAssessment::setup", sketch)
+        self.assertIn("BleAssessment::cleanup", sketch)
+
+    def test_ble_assessment_active_safety_contract(self):
+        suite = (ROOT / "ble_assessment.cpp").read_text(encoding="utf-8")
+        for token in (
+            "AUTHORIZATION_REQUIRED", "MAX_CONNECTION_ATTEMPTS",
+            "MAX_ATT_REQUESTS", "MAX_REPLAY_BYTES", "emergencyStop",
+            "authorized", "confirmed", "selectedDevice",
+            "disconnectClient", "stopScan", "unsubscribeAll",
+        ):
+            self.assertIn(token, suite)
+        self.assertNotIn("deleteAllBonds", suite)
+        self.assertNotIn("deleteBond(", suite)
+        self.assertNotIn("setSecurityAuth", suite)
+        self.assertNotIn("readValue(", suite)
+        self.assertIn("rawRead.overflow", suite)
+        self.assertIn("replayPeerAddress", suite)
+        self.assertIn("ble_gattc_read", suite)
+        self.assertIn("ble_gattc_read_long", suite)
+        self.assertIn("BleHidInject::isConnected()", suite)
+        self.assertIn("callbacksEnabled = false", suite)
+        self.assertIn("writes are never automatic", suite)
+        self.assertIn("notificationPayloadHash", suite)
+        self.assertIn("MESH_PROVISIONING_UUID", suite)
+        self.assertEqual(suite.count("writeValue("), 1)
+        self.assertIn("replayCandidateIndex", suite)
+        self.assertIn("replayUuid", suite)
+        self.assertIn("MAX_SUBSCRIPTIONS", suite)
+        self.assertIn("scan->setMaxResults(MAX_DEVICES)", suite)
+        self.assertIn("scan->setActiveScan(false)", suite)
+        self.assertIn("targetSelected", suite)
+        self.assertIn("authorizedTarget", suite)
+        self.assertIn("AssessmentClientCallbacks", suite)
+        self.assertIn("activeStage != beforeStage", suite)
+        self.assertIn("secureConnection(true)", suite)
+        self.assertNotIn("secureConnection(false)", suite)
+        self.assertIn("processPairingTest", suite)
+        self.assertIn("subscriptionSecurityTransitions", suite)
+        self.assertIn("unencryptedNotificationCount", suite)
+        self.assertIn("subscriptionUnencryptedEvents", suite)
+        self.assertIn("lastNotificationUuid", suite)
+        self.assertIn("notificationCallback(generation, source", suite)
+        self.assertIn("getConnHandle() == BLE_HS_CONN_HANDLE_NONE", suite)
+        self.assertLess(suite.index("Authorize before capture/read"),
+                        suite.index("captureReplayValue(false)", suite.index("void handleActiveAction")))
+
 
 if __name__ == "__main__":
     unittest.main()

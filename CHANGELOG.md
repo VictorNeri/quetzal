@@ -17,6 +17,10 @@ All notable changes to Quetzal are documented here.
 - Ordered Wi-Fi assessment suite with shared bounded 802.11 parsing/capture,
   passive auditing, radiotap PCAP export, mapping, WPS/rogue detection,
   channel survey, and a tightly bounded deauthentication resilience test
+- Ordered BLE assessment suite with bounded inventory/fingerprinting, passive
+  security/privacy/mesh auditing, read-only GATT checks, metadata-only
+  notification monitoring, enrolled rogue detection, and confirmation-gated
+  pairing, ATT, connection-resilience, and one-shot replay workflows
 - LittleFS and SD file manager
 - Persistent RGB light modes
 - Persistent touchscreen calibration

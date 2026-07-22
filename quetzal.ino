@@ -16,6 +16,7 @@
 #include "host_scanner.h"
 #include "espnow_test.h"
 #include "wifi_assessment.h"
+#include "ble_assessment.h"
 #include "touch_calibration.h"
 #include "subconfig.h"
 #include "utils.h"
@@ -72,7 +73,7 @@ const char *submenu_items[NUM_SUBMENU_ITEMS] = {
     "Back to Main Menu"};
 
 
-const int bluetooth_NUM_SUBMENU_ITEMS = 7;
+const int bluetooth_NUM_SUBMENU_ITEMS = 8;
 const char *bluetooth_submenu_items[bluetooth_NUM_SUBMENU_ITEMS] = {
     "BLE Jammer",
     "BLE Spoofer",
@@ -80,6 +81,7 @@ const char *bluetooth_submenu_items[bluetooth_NUM_SUBMENU_ITEMS] = {
     "GATT Enum",
     "BLE Scanner",
     "BLE Remote",
+    "Assessment Suite",
     "Back to Main Menu"};
 
 
@@ -148,6 +150,7 @@ const HwReq bluetooth_submenu_hwreq[bluetooth_NUM_SUBMENU_ITEMS] = {
     HW_NONE,   // GATT Enum
     HW_NONE,   // BLE Scanner
     HW_NONE,   // BLE Remote
+    HW_NONE,   // Assessment Suite
     HW_NONE};  // Back to Main Menu
 
 const HwReq nrf_submenu_hwreq[nrf_NUM_SUBMENU_ITEMS] = {
@@ -188,6 +191,7 @@ const unsigned char *bluetooth_submenu_icons[bluetooth_NUM_SUBMENU_ITEMS] = {
     bitmap_icon_list,        // GATT Enum
     bitmap_icon_graph,       // BLE Scanner
     bitmap_icon_key,         // BLE Remote
+    bitmap_icon_analyzer,    // Assessment Suite
     bitmap_icon_go_back
 };
 
@@ -1075,6 +1079,27 @@ void handleWiFiSubmenuButtons() {
 }
 
 
+void runBluetoothAssessmentFeature() {
+    current_submenu_index = 6;
+    in_sub_menu = true;
+    feature_active = true;
+    feature_exit_requested = false;
+    BleAssessment::setup();
+    while (current_submenu_index == 6 && !feature_exit_requested) {
+        in_sub_menu = true;
+        BleAssessment::loop();
+        delay(1);
+    }
+    BleAssessment::cleanup();
+    in_sub_menu = true;
+    is_main_menu = false;
+    submenu_initialized = false;
+    feature_active = false;
+    feature_exit_requested = false;
+    displaySubmenu();
+    delay(200);
+}
+
 void handleBluetoothSubmenuButtons() {
     if (isButtonPressed(BTN_UP)) {
         current_submenu_index = (current_submenu_index - 1 + active_submenu_size) % active_submenu_size;
@@ -1100,7 +1125,7 @@ void handleBluetoothSubmenuButtons() {
         last_interaction_time = millis();
         delay(200);
 
-        if (current_submenu_index == 6) {
+        if (current_submenu_index == 7) {
             in_sub_menu = false;
             feature_active = false;
             feature_exit_requested = false;
@@ -1322,6 +1347,10 @@ void handleBluetoothSubmenuButtons() {
                 delay(200);
             }
         }
+
+        if (current_submenu_index == 6) {
+            runBluetoothAssessmentFeature();
+        }
     }
 
     if (ts.touched() && !feature_active) {
@@ -1347,7 +1376,7 @@ void handleBluetoothSubmenuButtons() {
                 displaySubmenu();
                 delay(200);
 
-                if (current_submenu_index == 6) {
+                if (current_submenu_index == 7) {
                     in_sub_menu = false;
                     feature_active = false;
                     feature_exit_requested = false;
@@ -1556,6 +1585,8 @@ void handleBluetoothSubmenuButtons() {
                         displaySubmenu();
                         delay(200);
                     }
+                } else if (current_submenu_index == 6) {
+                    runBluetoothAssessmentFeature();
                 }
                 break;
             }
