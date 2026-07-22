@@ -91,8 +91,10 @@ third-party stack's peak heap use.
 
 `ble_assessment_logic.cpp` provides UI-independent bounded advertisement
 fingerprinting, AD-structure parsing, mesh exposure recognition, and payload
-copy helpers. Notification callbacks retain only a bounded hash and length under
-a critical section; they never touch the display or filesystem.
+copy helpers. Notification callbacks retain only the reported length, a hash of
+at most the first 64 payload bytes, aggregate and per-source security-state
+counters, and the latest source UUID under a critical section; they never retain
+the payload or touch the display or filesystem.
 
 Pre-security permission checks and ATT probes use the low-level one-request
 `ble_gattc_read` procedure. Replay capture uses low-level `ble_gattc_read_long`
@@ -108,18 +110,40 @@ authorization and confirmation taps. Pairing security is started asynchronously
 and completed or cancelled by the foreground state machine under a fixed deadline.
 Notification monitoring polls STOP and updates its security snapshot directly from
 the NimBLE authentication callback. Each event is attributed to its source
-characteristic and counted in the pre-secured or secured bucket at callback time;
+characteristic and counted in the unencrypted or encrypted bucket at callback time;
 the UI also records the transition count and latest characteristic whose CCCD
 subscription caused an observed encryption transition.
-Replay performs no
-connection, discovery, or value capture until target-bound authorization is
-recorded, then binds the captured value and
-displayed characteristic UUID to the exact peer and rejects values over 64 bytes
-instead of replaying a truncated prefix. Client disconnect completion is observed
-through NimBLE callbacks and the post-callback invalid connection handle before reuse.
+Replay performs no connection, discovery, or value capture until target-bound
+authorization is recorded. It then binds the captured value and displayed
+characteristic UUID to the exact peer, aborts its long read when byte 65 is
+observed, and rejects oversized values instead of replaying a truncated prefix.
+Client disconnect completion requires both the NimBLE callback and the
+post-callback invalid connection handle before the client can be reused.
 Request, duration, payload, and attempt caps are constants. STOP is checked
 between synchronous NimBLE procedures; an in-flight procedure remains subject
 to NimBLE's own timeout and cannot be preempted by the UI.
+
+#### BLE assessment operation model
+
+| Tool | Radio/GATT behavior | State-changing guard and bound |
+| --- | --- | --- |
+| Security Auditor | Selected-target connection, discovery, and raw read-only permission probes | No writes and no automatic security retry |
+| GATT Permissions | Selected-target discovery and raw read-only probes | No write probes and no automatic security retry |
+| Privacy Analyzer | Passive five-second rescan and bounded advertisement fingerprint comparison | Selection remapped only by exact BLE address |
+| Pairing Resilience | One asynchronous security request | Address-bound authorization, separate confirmation, STOP, 15-second deadline |
+| Rogue Peripheral | LittleFS baseline enrollment and passive five-second comparison | Enrollment requires an explicitly selected identity; missing identity is inconclusive |
+| Notification Monitor | Up to eight disclosed CCCD writes and metadata callbacks | Address-bound authorization, separate confirmation, STOP, 10-second window |
+| ATT Robustness | Up to 24 raw read requests plus one recovery reconnect | Address-bound authorization, separate confirmation, STOP, 15-second deadline |
+| Connection Resilience | Up to ten connect/disconnect attempts | Address-bound authorization, separate confirmation, STOP, minimum 700 ms interval |
+| Mesh Auditor | Passive five-second scan for provisioning/proxy UUIDs and Mesh AD types | No connection or transmission |
+| Replay Tester | Raw long-read capture followed by at most one write | Authorization before capture, separate write confirmation, exact peer/UUID binding, complete value capped at 64 bytes |
+
+The Notification Monitor registers each bounded source slot before enabling its
+CCCD so an immediate callback can still be attributed. Authentication completion
+updates the callback security snapshot directly; foreground polling refreshes the
+displayed connection state during the monitoring window. Callback generations
+and callback-disable-before-unsubscribe prevent late events from a prior session
+from contaminating a later run.
 
 ### Wi-Fi assessment ownership
 

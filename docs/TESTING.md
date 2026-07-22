@@ -112,10 +112,14 @@ Use a second ESP32 configured for Wi-Fi channel 1:
   5. Enroll a Rogue Peripheral baseline, compare an unchanged device, test an
      intentionally changed advertising fingerprint, and treat a missing baseline
      device as inconclusive.
-  6. Confirm Notification Monitor requires two taps, subscribes to at most eight
-     sources for ten seconds, retains only event count/payload length/bounded hash,
-     separates pre-secured and secured event counts, identifies the latest CCCD
-     security transition, and stops immediately from the bottom control.
+  6. Confirm Notification Monitor requires two taps and that the operator-facing
+     documentation discloses its CCCD subscription writes. Verify it subscribes to
+     at most eight sources for ten seconds and retains only event count, reported
+     payload length, and a hash of at most the first 64 bytes. Verify the
+     unencrypted/encrypted event counts, the latest
+     source UUID, the latest observed CCCD security transition, and immediate STOP
+     from the bottom control. Trigger a notification immediately after subscribing
+     to verify the pre-registered source slot attributes it correctly.
   7. Confirm ATT Robustness requires two taps, issues at most 24 read-only probes,
      checks the 15-second deadline between procedures, supports bottom-screen STOP,
      and performs a recovery reconnect.
@@ -128,13 +132,20 @@ Use a second ESP32 configured for Wi-Fi channel 1:
       writes once only to the same selected target/characteristic, and aborts if
       the connection or retained characteristic is no longer valid. Present a
       readable/writable value over 64 bytes and verify replay rejects it instead
-      of sending a truncated prefix.
+      of sending a truncated prefix. Test values of exactly 64 and 65 bytes,
+      including a negotiated MTU below 66, to exercise long-read continuation.
 - Exit active tools during scanning, subscription, connection, and post-test states;
   verify scan/client/subscription cleanup and that BLE HID still works afterward.
 - Connect a BLE HID peer and verify Assessment Suite refuses to start until that
   peer disconnects.
 - Account for NimBLE's synchronous procedure behavior: STOP is handled between
   procedures, while an in-flight operation may wait for the stack timeout.
+- Force repeated rapid disconnect/reconnect cycles and verify a new connection is
+  not attempted until both the disconnect callback has run and the previous
+  NimBLE connection handle is invalid.
+- During Notification Monitor, trigger security after CCCD registration and
+  verify the authentication callback changes subsequent event classification
+  without losing the event's source characteristic.
 - Exercise a peripheral with an unusually large GATT database while monitoring
   free heap to characterize NimBLE's transient discovery cache; Quetzal's own
   retained characteristic records must remain capped at 40.

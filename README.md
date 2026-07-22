@@ -75,8 +75,10 @@ constraints.
      STOP support and no PIN guessing, process-wide policy changes, or bond deletion
   5. Enrolled rogue-peripheral fingerprint comparison stored in LittleFS
   6. Two-confirmation, stoppable ten-second notification metadata monitor that
-     retains only length/hash, separates pre-secured and secured events, and
-     identifies CCCD subscription security transitions
+     performs up to eight disclosed CCCD subscription writes, retains only
+     bounded length/hash metadata, attributes events to their source
+     characteristic, separates unencrypted and encrypted events, and reports
+     observed subscription security transitions
   7. Two-confirmation ATT read-resilience test capped at 24 requests and 15 seconds
   8. Two-confirmation connection resilience test capped at 10 attempts with a
      700 ms minimum interval
@@ -92,6 +94,22 @@ authorization are invalidated. NimBLE may transiently cache the complete remote
 GATT database during attribute discovery before Quetzal applies its 40-record
 application retention cap; large-database peak heap behavior remains a required
 physical-board test.
+
+Active BLE operations use the following fixed limits:
+
+| Operation | Authorization and bound |
+| --- | --- |
+| Pairing resilience | Target-bound authorization plus separate confirmation; one asynchronous request; 15-second deadline |
+| Notification monitor | Target-bound authorization plus separate confirmation; up to 8 CCCD writes; 10-second window; bottom-screen STOP |
+| ATT robustness | Target-bound authorization plus separate confirmation; up to 24 read-only requests; 15-second deadline |
+| Connection resilience | Target-bound authorization plus separate confirmation; up to 10 attempts; minimum 700 ms interval |
+| Application replay | Authorization before capture; separate write confirmation; one write of a complete value no larger than 64 bytes |
+
+Pre-security audits use raw NimBLE host reads so permission failures are reported
+without the high-level API automatically retrying with pairing. Replay capture
+uses a long-read procedure, aborts when byte 65 is observed, and never sends a
+truncated prefix. Client reuse waits for both the disconnect callback and
+NimBLE's invalid connection handle.
 
 ESP32-C5 does not support Bluetooth Classic. Classic-only upstream features are
 not available. High-level NimBLE operations may block until the stack's own
@@ -203,6 +221,8 @@ subghz.cpp               CC1101 capture/transmit workflows
 zigbee.cpp               Native ESP32-C5 IEEE 802.15.4 reconnaissance
 ble_gatt_enum.cpp        BLE GATT client enumerator
 ble_hid_inject.cpp       BLE HID keyboard/media remote
+ble_assessment.*         Ordered BLE assessment UI, lifecycle, and safeguards
+ble_assessment_logic.*   Bounded BLE advertisement parsing and fingerprinting
 host_scanner.cpp         Local network host and port scanner
 file_manager.cpp         LittleFS and SD browser
 hw_detect.cpp            Timeout-bounded RF-HAT detection
@@ -251,6 +271,11 @@ Source files use UTF-8 and LF line endings, enforced by `.editorconfig` and
 - Deauth Resilience requires explicit authorization and a mapped unicast client,
   sends no more than 10 frames, and reports driver TX acceptance rather than
   claiming over-air delivery or client disruption.
+- BLE assessment discovery can transiently use additional heap inside NimBLE's
+  complete remote-attribute cache before Quetzal applies its own retention caps.
+- Physical NM-CYD-C5 validation is still required for BLE pairing dialogs,
+  notification timing, reconnect behavior, STOP responsiveness, radio
+  coexistence, and repeated client/subscription cleanup.
 
 ## History and attribution
 

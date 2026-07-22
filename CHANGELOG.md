@@ -40,6 +40,9 @@ All notable changes to Quetzal are documented here.
 - Normalized source line endings and explicitly scoped repeated macros
 - Switched PlatformIO to the supported `build_src_filter` setting
 - Replaced the unavailable IR Remote menu with ESP-NOW tests
+- Expanded BLE assessment documentation with the final target-binding,
+  asynchronous pairing, disconnect-state, source-aware notification, CCCD-write,
+  long-read replay, STOP, and fixed resource-limit behavior
 
 ### Fixed
 
@@ -52,6 +55,9 @@ All notable changes to Quetzal are documented here.
 - Touch calibration times out and rejects implausibly small sample spans
 - Host Scanner now uses ICMP discovery, the active subnet mask, bounded scan
   ranges, and paged results instead of a TCP-port-80 timing heuristic
+- BLE assessment safety review findings are reflected in the documented runtime
+  model: raw reads avoid automatic pairing, replay rejects byte 65 instead of
+  sending a truncated prefix, and notification metadata is classified per source
 
 ### Removed
 
