@@ -15,6 +15,7 @@
 #include "rgb_light.h"
 #include "host_scanner.h"
 #include "espnow_test.h"
+#include "wifi_assessment.h"
 #include "touch_calibration.h"
 #include "subconfig.h"
 #include "utils.h"
@@ -58,7 +59,7 @@ int current_menu_index = 0;
 bool is_main_menu = false;
 
 
-const int NUM_SUBMENU_ITEMS = 8;
+const int NUM_SUBMENU_ITEMS = 9;
 const char *submenu_items[NUM_SUBMENU_ITEMS] = {
     "Packet Monitor",
     "Beacon Spammer",
@@ -67,6 +68,7 @@ const char *submenu_items[NUM_SUBMENU_ITEMS] = {
     "WiFi Scanner",
     "Captive Portal",
     "Host Scanner",
+    "Assessment Suite",
     "Back to Main Menu"};
 
 
@@ -175,6 +177,7 @@ const unsigned char *wifi_submenu_icons[NUM_SUBMENU_ITEMS] = {
     bitmap_icon_jammer,       // WiFi Scanner
     bitmap_icon_bash,         // Captive Portal
     bitmap_icon_scanner,      // Host Scanner
+    bitmap_icon_analyzer,     // Assessment Suite
     bitmap_icon_go_back
 };
 
@@ -508,7 +511,7 @@ void handleWiFiSubmenuButtons() {
         last_interaction_time = millis();
         delay(200);
 
-        if (current_submenu_index == 7) {
+        if (current_submenu_index == 8) {
             in_sub_menu = false;
             feature_active = false;
             feature_exit_requested = false;
@@ -762,6 +765,26 @@ void handleWiFiSubmenuButtons() {
                 delay(200);
             }
         }
+
+        if (current_submenu_index == 7) {
+            in_sub_menu = true;
+            feature_active = true;
+            feature_exit_requested = false;
+            WifiAssessment::setup();
+            while (current_submenu_index == 7 && !feature_exit_requested) {
+                in_sub_menu = true;
+                WifiAssessment::loop();
+                delay(1);
+            }
+            WifiAssessment::cleanup();
+            in_sub_menu = true;
+            is_main_menu = false;
+            submenu_initialized = false;
+            feature_active = false;
+            feature_exit_requested = false;
+            displaySubmenu();
+            delay(200);
+        }
     }
 
     if (ts.touched() && !feature_active) {
@@ -787,7 +810,7 @@ void handleWiFiSubmenuButtons() {
                 displaySubmenu();
                 delay(200);
 
-                if (current_submenu_index == 7) {
+                if (current_submenu_index == 8) {
                     in_sub_menu = false;
                     feature_active = false;
                     feature_exit_requested = false;
@@ -1025,6 +1048,25 @@ void handleWiFiSubmenuButtons() {
                         displaySubmenu();
                         delay(200);
                     }
+                } else if (current_submenu_index == 7) {
+                    current_submenu_index = 7;
+                    in_sub_menu = true;
+                    feature_active = true;
+                    feature_exit_requested = false;
+                    WifiAssessment::setup();
+                    while (current_submenu_index == 7 && !feature_exit_requested) {
+                        in_sub_menu = true;
+                        WifiAssessment::loop();
+                        delay(1);
+                    }
+                    WifiAssessment::cleanup();
+                    in_sub_menu = true;
+                    is_main_menu = false;
+                    submenu_initialized = false;
+                    feature_active = false;
+                    feature_exit_requested = false;
+                    displaySubmenu();
+                    delay(200);
                 }
                 break;
             }

@@ -39,6 +39,43 @@ class FirmwareContractTests(unittest.TestCase):
         source = (ROOT / "espnow_test.cpp").read_text(encoding="utf-8")
         self.assertIn("volatile uint16_t lastLength", source)
         self.assertNotIn("min(length, 255)", source)
+    def test_wifi_assessment_suite_contract(self):
+        sketch = (ROOT / "quetzal.ino").read_text(encoding="utf-8")
+        parser = (ROOT / "wifi_80211.cpp").read_text(encoding="utf-8")
+        capture = (ROOT / "wifi_capture.cpp").read_text(encoding="utf-8")
+        suite = (ROOT / "wifi_assessment.cpp").read_text(encoding="utf-8")
+        self.assertIn('"Assessment Suite"', sketch)
+        for name in (
+            "Config Auditor", "EAPOL Capture", "Mgmt Analyzer",
+            "Rogue AP Detector", "AP/Client Mapper", "WPS Scanner",
+            "Channel Survey", "Deauth Resilience",
+        ):
+            self.assertIn(name, suite)
+        self.assertIn("parseSecurityIes", parser)
+        self.assertIn("findEapol", parser)
+        self.assertIn("DLT_IEEE802_11_RADIO", suite)
+        self.assertIn("esp_wifi_set_promiscuous_rx_cb", capture)
+        self.assertIn("hasInconsistentDuplicate", suite)
+        self.assertIn("MAX_DEAUTH_FRAMES", suite)
+        self.assertIn("AUTHORIZATION_REQUIRED", suite)
+
+    def test_wifi_assessment_safety_regressions(self):
+        suite = (ROOT / "wifi_assessment.cpp").read_text(encoding="utf-8")
+        capture = (ROOT / "wifi_capture.cpp").read_text(encoding="utf-8")
+        parser = (ROOT / "wifi_80211.cpp").read_text(encoding="utf-8")
+        self.assertIn("esp_wifi_get_country", suite)
+        self.assertIn("ABORTED: target channel unavailable", suite)
+        self.assertIn("Baseline not seen: inconclusive", suite)
+        self.assertIn("Ignore group-key handshakes", suite)
+        self.assertIn("handshakeClient", suite)
+        self.assertIn("bodyLength", suite)
+        self.assertGreaterEqual(suite.count("clientCount = 0"), 3)
+        self.assertIn("if (!captureActive)", capture)
+        self.assertIn("record.timestampUs", suite)
+        self.assertIn("surveyPackets[record.channel]", suite)
+        self.assertIn("toolCaptureError", suite)
+        self.assertIn("observationCaptureError", suite)
+        self.assertIn("if ((out.subtype & 0x8) != 0)", parser)
 
 
 if __name__ == "__main__":

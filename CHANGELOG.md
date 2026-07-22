@@ -14,6 +14,9 @@ All notable changes to Quetzal are documented here.
 - Native ESP32-C5 IEEE 802.15.4 channel scanner and passive sniffer
 - Wi-Fi local host and common-port scanner
 - ESP-NOW broadcast and receive diagnostics
+- Ordered Wi-Fi assessment suite with shared bounded 802.11 parsing/capture,
+  passive auditing, radiotap PCAP export, mapping, WPS/rogue detection,
+  channel survey, and a tightly bounded deauthentication resilience test
 - LittleFS and SD file manager
 - Persistent RGB light modes
 - Persistent touchscreen calibration

@@ -70,6 +70,24 @@ module fitted in the one physical slot; it does not enable concurrent operation.
 - NRF24 tools use RF24 over the external shared SPI bus.
 - CC1101 tools use SmartRC-CC1101 plus the C5 RMT compatibility path.
 
+### Wi-Fi assessment ownership
+
+The Assessment Suite is split into three focused modules:
+
+- `wifi_80211.cpp` performs allocation-free, bounded 802.11, RSN, WPS, BSS
+  Load, and EAPOL parsing.
+- `wifi_capture.cpp` is the suite's sole promiscuous callback owner. The callback
+  only validates and copies bounded snapshots into a fixed ring; parsing, TFT,
+  filesystem access, and channel changes remain in the foreground loop.
+- `wifi_assessment.cpp` owns the ordered tool menu, native AP inventory,
+  radiotap PCAP writer, explicit rogue baseline, bounded maps and counters, and
+  the two-stage authorization flow for the active resilience test.
+
+Only one suite tool owns the Wi-Fi radio at a time. Every transition disables
+promiscuous mode and clears its callback before scanning, changing channel, or
+returning to the parent menu. EAPOL PCAP writes use LittleFS to avoid contending
+with touch/display on the shared SD SPI host.
+
 Features are responsible for disabling conflicting radio use and restoring UI
 resources on exit. Long-running scans poll touchscreen state for cancellation
 where supported.

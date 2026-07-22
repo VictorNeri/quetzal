@@ -60,6 +60,25 @@ In an authorized lab:
 - Tap a result to verify every common open port is available in its detail view,
   and verify truncation is reported when more than 64 hosts respond.
 - Verify cancellation during long scans.
+- Open Assessment Suite and exercise tools in their displayed order:
+  1. Confirm Config Auditor reports auth/cipher/WPS and captures PMF flags from
+     beacons on a lab WPA2/WPA3 AP.
+  2. Reconnect a lab client while EAPOL Capture is open; verify M1-M4 indicators
+     and open the generated LittleFS PCAP in Wireshark as radiotap/802.11.
+  3. Generate association, deauthentication, and disassociation traffic and
+     verify Management Analyzer counters and reason/status fields.
+  4. Enroll a rogue-detector baseline, compare an unchanged AP, then test a lab
+     clone with an intentionally different security fingerprint.
+  5. Generate client traffic and verify AP/Client Mapper relationships and RSSI.
+  6. Compare Passive WPS Scanner results with a WPS-enabled lab router.
+  7. Verify Channel Survey advances only through the country-configured 2.4 GHz
+     channels and labels its counts as observed traffic rather than true CCA
+     airtime.
+  8. After mapping a lab client, verify Deauth Resilience requires two explicit
+     confirmations, sends at most 10 unicast frames, stops on exit, and reports
+     TX acceptance/post-test activity without claiming guaranteed disruption.
+- Exit and re-enter every assessment repeatedly; confirm promiscuous capture,
+  callbacks, files, and Wi-Fi channel state do not leak between tools.
 - Exercise active test functions only against owned lab equipment.
 
 ## ESP-NOW

@@ -42,6 +42,16 @@ constraints.
 - Captive portal
 - Subnet-aware host scanner using ICMP discovery and common-port checks
   (large subnets are capped to the nearest 254 addresses)
+- Ordered Wi-Fi Assessment Suite for authorized labs:
+  1. Security configuration scoring (auth mode, cipher, PMF, WPS, channel)
+  2. Fixed-channel WPA/EAPOL capture with radiotap PCAP output to LittleFS
+  3. Management-frame counters with reason and status decoding
+  4. Explicitly enrolled rogue-AP fingerprint comparison
+  5. Passive AP/client relationship mapping
+  6. Passive WPS exposure reporting
+  7. 2.4 GHz observed-packet survey over the configured regulatory channel set
+  8. Two-confirmation, unicast-only deauthentication resilience test capped at
+     10 frames over five seconds
 
 ### ESP-NOW
 
@@ -206,6 +216,13 @@ Source files use UTF-8 and LF line endings, enforced by `.editorconfig` and
   not appear in Host Scanner results.
 - Host Scanner probes at most 254 addresses and retains detailed port results
   for the first 64 responsive hosts, reporting when the list is truncated.
+- WPA/EAPOL capture is passive and fixed-channel; it neither forces a reconnect
+  nor cracks credentials. Captures are written to LittleFS as radiotap PCAP.
+- Channel Survey reports observed packet and byte counts, not true CCA airtime,
+  and surveys only the 2.4 GHz channels allowed by the active country setting.
+- Deauth Resilience requires explicit authorization and a mapped unicast client,
+  sends no more than 10 frames, and reports driver TX acceptance rather than
+  claiming over-air delivery or client disruption.
 
 ## History and attribution
 
